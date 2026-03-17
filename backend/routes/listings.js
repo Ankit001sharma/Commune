@@ -1,0 +1,17 @@
+const express = require('express');
+const router = express.Router();
+const listingController = require('../controllers/listingController');
+const { protect, optionalAuth } = require('../middleware/auth');
+const { validateListing, validateObjectId } = require('../middleware/validate');
+const upload = require('../middleware/upload');
+
+router.get('/', optionalAuth, listingController.getListings);
+router.get('/my', protect, listingController.getMyListings);
+router.get('/category/:category', optionalAuth, listingController.getListingsByCategory);
+router.get('/:id', validateObjectId, optionalAuth, listingController.getListing);
+
+router.post('/', protect, upload.array('images', 5), validateListing, listingController.createListing);
+router.put('/:id', protect, validateObjectId, upload.array('images', 5), listingController.updateListing);
+router.delete('/:id', protect, validateObjectId, listingController.deleteListing);
+
+module.exports = router;
