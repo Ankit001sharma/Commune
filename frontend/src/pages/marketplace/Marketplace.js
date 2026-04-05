@@ -39,10 +39,11 @@ const Marketplace = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
+  
   const fetchListings = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, limit: 12, sort, status: 'available' };
+      const params = { page, limit: 12, sort };
       if (search) params.search = search;
       if (category) params.category = category;
       const { data } = await listingAPI.getAll(params);
@@ -202,5 +203,6 @@ const Marketplace = () => {
     </div>
   );
 };
+
 
 export default Marketplace;

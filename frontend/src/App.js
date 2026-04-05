@@ -7,6 +7,7 @@ import AIChatbot from './components/AIChatbot';
 // Auth Pages
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import Home from './pages/Home';
 
 // Marketplace Pages
 import Marketplace from './pages/marketplace/Marketplace';
@@ -85,8 +86,8 @@ const App = () => {
         {/* App routes (with layout) */}
         <Route element={<AppLayout />}>
           {/* Home redirects to marketplace */}
-          <Route path="/" element={<Navigate to="/marketplace" replace />} />
-
+          {/* <Route path="/" element={<Navigate to="/marketplace" replace />} /> */}
+          {<Route path="/" element={<Home />} />}
           {/* Marketplace */}
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/marketplace/:id" element={<ListingDetail />} />
@@ -142,7 +143,8 @@ const App = () => {
           <Route path="/ai-search" element={<AISearch />} />
 
           {/* Catch all */}
-          <Route path="*" element={<Navigate to="/marketplace" replace />} />
+          {/* <Route path="*" element={<Navigate to="/marketplace" replace />} /> */}
+          <Route path="/" element={<Home />} />
         </Route>
       </Routes>
 

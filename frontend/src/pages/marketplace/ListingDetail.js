@@ -8,6 +8,7 @@ import {
   ChevronRightIcon,
 } from '../../components/Icons';
 import { toast } from '../../components/ui/Toast';
+import AppImage from "../../components/common/AppImage";
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
@@ -122,11 +123,11 @@ const ListingDetail = () => {
         <div className="detail-gallery">
           <div className="detail-main-image">
             {images.length > 0 ? (
-              <img
-                src={`${API_URL}${images[selectedImage]?.url}`}
-                alt={listing.title}
-                className="detail-image"
-              />
+
+          <AppImage
+            src={`${API_URL}${images[selectedImage]?.url}`}
+            height={400}
+          />
             ) : (
               <div className="card-image-placeholder" style={{ height: 400 }}>
                 <ImageIcon size={64} />
