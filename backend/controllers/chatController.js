@@ -1,7 +1,9 @@
 const Conversation = require('../models/Conversation');
 const AppError = require('../utils/AppError');
 const { sendResponse } = require('../utils/response');
+const Notification = require('../models/Notification');
 
+// 🔹 GET ALL CONVERSATIONS
 exports.getConversations = async (req, res, next) => {
   try {
     const conversations = await Conversation.find({
@@ -19,6 +21,7 @@ exports.getConversations = async (req, res, next) => {
   }
 };
 
+// 🔹 GET SINGLE CONVERSATION
 exports.getConversation = async (req, res, next) => {
   try {
     const conversation = await Conversation.findById(req.params.id)
@@ -34,37 +37,41 @@ exports.getConversation = async (req, res, next) => {
     );
     if (!isParticipant) return next(new AppError('Access denied.', 403));
 
-    // Mark messages as read
+    // mark messages read
     conversation.messages.forEach((msg) => {
       if (msg.sender._id.toString() !== req.user._id.toString()) {
-        const alreadyRead = msg.readBy.some((r) => r.user.toString() === req.user._id.toString());
+        const alreadyRead = msg.readBy.some(
+          (r) => r.user.toString() === req.user._id.toString()
+        );
         if (!alreadyRead) {
           msg.readBy.push({ user: req.user._id, readAt: new Date() });
         }
       }
     });
-    await conversation.save();
 
+    await conversation.save();
     sendResponse(res, 200, conversation);
+
   } catch (error) {
     next(error);
   }
 };
 
+// 🔹 CREATE OR GET CONVERSATION
 exports.createOrGetConversation = async (req, res, next) => {
   try {
     const { recipientId, listingId, serviceId } = req.body;
 
     if (!recipientId) return next(new AppError('Recipient is required.', 400));
     if (recipientId === req.user._id.toString()) {
-      return next(new AppError('Cannot start a conversation with yourself.', 400));
+      return next(new AppError('Cannot chat with yourself.', 400));
     }
 
-    // Check for existing conversation
     const query = {
       participants: { $all: [req.user._id, recipientId] },
       isActive: true,
     };
+
     if (listingId) query.relatedListing = listingId;
     if (serviceId) query.relatedService = serviceId;
 
@@ -80,20 +87,22 @@ exports.createOrGetConversation = async (req, res, next) => {
         relatedService: serviceId || null,
         messages: [],
       });
+
       await conversation.populate('participants', 'firstName lastName avatar lastActive');
-      if (listingId) await conversation.populate('relatedListing', 'title images price');
-      if (serviceId) await conversation.populate('relatedService', 'title pricing');
     }
 
     sendResponse(res, 200, conversation);
+
   } catch (error) {
     next(error);
   }
 };
 
+// 🔹 SEND MESSAGE (IMPORTANT)
 exports.sendMessage = async (req, res, next) => {
   try {
     const { content, messageType = 'text', metadata } = req.body;
+
     if (!content || content.trim().length === 0) {
       return next(new AppError('Message content is required.', 400));
     }
@@ -104,6 +113,7 @@ exports.sendMessage = async (req, res, next) => {
     const isParticipant = conversation.participants.some(
       (p) => p.toString() === req.user._id.toString()
     );
+
     if (!isParticipant) return next(new AppError('Access denied.', 403));
 
     const message = {
@@ -115,6 +125,7 @@ exports.sendMessage = async (req, res, next) => {
     };
 
     conversation.messages.push(message);
+
     conversation.lastMessage = {
       content: content.trim(),
       sender: req.user._id,
@@ -123,14 +134,31 @@ exports.sendMessage = async (req, res, next) => {
 
     await conversation.save();
 
+    // 🔥 CREATE NOTIFICATIONS
+    const recipients = conversation.participants.filter(
+      (p) => p.toString() !== req.user._id.toString()
+    );
+
+    for (let userId of recipients) {
+      await Notification.create({
+        user: userId,
+        type: "message",
+        text: `${req.user.firstName} sent you a message`,
+        conversationId: conversation._id,
+        sender: req.user._id,
+      });
+    }
+
     const newMessage = conversation.messages[conversation.messages.length - 1];
 
     sendResponse(res, 201, newMessage, 'Message sent');
+
   } catch (error) {
     next(error);
   }
 };
 
+// 🔹 UNREAD COUNT
 exports.getUnreadCount = async (req, res, next) => {
   try {
     const conversations = await Conversation.find({
@@ -139,16 +167,20 @@ exports.getUnreadCount = async (req, res, next) => {
     });
 
     let unreadCount = 0;
+
     conversations.forEach((conv) => {
       conv.messages.forEach((msg) => {
         if (msg.sender.toString() !== req.user._id.toString()) {
-          const isRead = msg.readBy.some((r) => r.user.toString() === req.user._id.toString());
+          const isRead = msg.readBy.some(
+            (r) => r.user.toString() === req.user._id.toString()
+          );
           if (!isRead) unreadCount++;
         }
       });
     });
 
     sendResponse(res, 200, { unreadCount });
+
   } catch (error) {
     next(error);
   }

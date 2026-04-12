@@ -43,6 +43,7 @@ app.use(morgan(config.nodeEnv === 'development' ? 'dev' : 'combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -65,7 +66,8 @@ app.use('/api/posts', postRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/ai', aiRoutes);
-
+app.use("/api/notifications", require("./routes/notificationRoutes"));
+app.use("/api/notifications", require("./routes/notificationRoutes"));
 // Health check
 app.get('/api/health', (req, res) => {
   res.status(200).json({

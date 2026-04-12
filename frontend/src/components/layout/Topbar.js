@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { SearchIcon, BellIcon, MenuIcon } from '../Icons';
@@ -6,7 +6,36 @@ import { SearchIcon, BellIcon, MenuIcon } from '../Icons';
 const Topbar = ({ onMenuToggle }) => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
   const [searchQuery, setSearchQuery] = useState('');
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  // 🔥 FETCH NOTIFICATIONS COUNT
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const fetchNotifications = async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/notifications", {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          }
+        });
+
+        const data = await res.json();
+
+        if (data?.data) {
+          // only unread count
+          const unread = data.data.filter(n => !n.isRead).length;
+          setNotificationCount(unread);
+        }
+      } catch (err) {
+        console.error("Notification fetch error:", err);
+      }
+    };
+
+    fetchNotifications();
+  }, [isAuthenticated]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -22,6 +51,7 @@ const Topbar = ({ onMenuToggle }) => {
         <button className="menu-toggle" onClick={onMenuToggle}>
           <MenuIcon size={22} />
         </button>
+
         <form className="topbar-search" onSubmit={handleSearch}>
           <SearchIcon />
           <input
@@ -36,21 +66,44 @@ const Topbar = ({ onMenuToggle }) => {
       <div className="topbar-right">
         {isAuthenticated ? (
           <>
-            <button className="topbar-icon-btn" onClick={() => navigate('/chat')} title="Messages">
+            {/* Messages */}
+            <button
+              className="topbar-icon-btn"
+              onClick={() => navigate('/chat')}
+              title="Messages"
+            >
               <MessageCircleIconSmall />
             </button>
-            <button className="topbar-icon-btn" title="Notifications">
+
+            {/* 🔔 Notifications */}
+            <button
+              className="topbar-icon-btn"
+              title="Notifications"
+              onClick={() => navigate('/notifications')}
+              style={{ position: 'relative' }}
+            >
               <BellIcon size={20} />
-              <span className="topbar-badge">3</span>
+
+              {notificationCount > 0 && (
+                <span className="topbar-badge">
+                  {notificationCount}
+                </span>
+              )}
             </button>
+
+            {/* Profile */}
             <button
               className="topbar-icon-btn"
               onClick={() => navigate('/dashboard')}
               title="Profile"
               style={{
-                width: 36, height: 36, borderRadius: '50%',
-                background: 'var(--cx-primary)', color: '#fff',
-                fontSize: '0.82rem', fontWeight: 700
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                background: 'var(--cx-primary)',
+                color: '#fff',
+                fontSize: '0.82rem',
+                fontWeight: 700
               }}
             >
               {user?.firstName?.[0]}{user?.lastName?.[0]}
@@ -58,8 +111,12 @@ const Topbar = ({ onMenuToggle }) => {
           </>
         ) : (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/login')}>Log In</button>
-            <button className="btn btn-primary btn-sm" onClick={() => navigate('/register')}>Sign Up</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/login')}>
+              Log In
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={() => navigate('/register')}>
+              Sign Up
+            </button>
           </div>
         )}
       </div>

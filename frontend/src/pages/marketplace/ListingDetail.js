@@ -68,7 +68,8 @@ const ListingDetail = () => {
     if (!isAuthenticated) return navigate('/login');
     try {
       const { data } = await chatAPI.createConversation({
-        participantId: listing.seller._id,
+        // participantId: listing.seller._id,
+        recipientId: listing.seller._id,
         listingId: listing._id,
       });
       navigate(`/chat/${data.data._id}`);

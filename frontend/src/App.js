@@ -36,6 +36,8 @@ import Transactions, { TransactionDetail } from './pages/transactions/Transactio
 // AI Search
 import AISearch from './pages/ai/AISearch';
 
+import Notifications from './pages/notifications/Notifications';
+
 // Protected Route wrapper
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -141,6 +143,8 @@ const App = () => {
 
           {/* AI Search */}
           <Route path="/ai-search" element={<AISearch />} />
+
+          <Route path="/notifications" element={<Notifications />} />
 
           {/* Catch all */}
           {/* <Route path="*" element={<Navigate to="/marketplace" replace />} /> */}
