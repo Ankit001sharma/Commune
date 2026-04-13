@@ -20,6 +20,10 @@ const postRoutes = require('./routes/posts');
 const chatRoutes = require('./routes/chat');
 const transactionRoutes = require('./routes/transactions');
 const aiRoutes = require('./routes/ai');
+const userRoutes = require('./routes/users');
+const notificationRoutes = require('./routes/notificationRoutes');
+const { protect } = require('./middleware/auth');
+const aiController = require('./controllers/aiController');
 
 const app = express();
 const server = http.createServer(app);
@@ -66,8 +70,15 @@ app.use('/api/posts', postRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/ai', aiRoutes);
-app.use("/api/notifications", require("./routes/notificationRoutes"));
-app.use("/api/notifications", require("./routes/notificationRoutes"));
+app.use('/api/users', userRoutes);
+app.get('/api/recommendations', protect, aiController.getRecommendations);
+app.use('/api/notifications', notificationRoutes);
+
+const apiRouteMap = [
+  'POST /api/users/save-item',
+  'GET /api/users/saved-items',
+  'GET /api/recommendations',
+];
 // Health check
 app.get('/api/health', (req, res) => {
   res.status(200).json({
@@ -99,6 +110,8 @@ const startServer = async () => {
     console.log(`  Environment: ${config.nodeEnv}`);
     console.log(`  Port: ${config.port}`);
     console.log(`  API: http://localhost:${config.port}/api`);
+    console.log('  Key Routes:');
+    apiRouteMap.forEach((route) => console.log(`    - ${route}`));
     console.log(`====================================\n`);
   });
 };

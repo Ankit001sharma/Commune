@@ -4,7 +4,7 @@ import { postAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import {
   ThumbsUpIcon, CommentIcon, EyeIcon, ClockIcon, TagIcon,
-  TrashIcon, ChevronRightIcon, SendIcon, EditIcon,
+  TrashIcon, ChevronRightIcon, SendIcon, EditIcon, HeartIcon, HeartFilledIcon,
 } from '../../components/Icons';
 import { toast } from '../../components/ui/Toast';
 
@@ -27,7 +27,7 @@ const typeLabels = {
 const PostDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, toggleSavedItem, isItemSaved } = useAuth();
 
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -79,6 +79,15 @@ const PostDetail = () => {
     }
   };
 
+  const handleSave = async () => {
+    if (!isAuthenticated) return navigate('/login');
+    try {
+      await toggleSavedItem(id, 'post');
+    } catch (err) {
+      toast.error(err.message || 'Failed to update saved state');
+    }
+  };
+
   const handleComment = async (e) => {
     e.preventDefault();
     if (!comment.trim()) return;
@@ -121,6 +130,7 @@ const PostDetail = () => {
   };
 
   const isLiked = user && post?.likes?.some((l) => (typeof l === 'string' ? l : l._id) === user._id);
+  const isSaved = post ? isItemSaved(post._id, 'post') : false;
 
   if (loading) {
     return (
@@ -184,6 +194,10 @@ const PostDetail = () => {
           <button className={`post-action-btn ${isLiked ? 'liked' : ''}`} onClick={handleLike}>
             <ThumbsUpIcon size={18} />
             <span>{post.likes?.length || 0} {post.likes?.length === 1 ? 'Like' : 'Likes'}</span>
+          </button>
+          <button className={`post-action-btn ${isSaved ? 'liked' : ''}`} onClick={handleSave}>
+            {isSaved ? <HeartFilledIcon size={18} /> : <HeartIcon size={18} />}
+            <span>{isSaved ? 'Saved' : 'Save'}</span>
           </button>
           <span className="post-action-btn" style={{ cursor: 'default' }}>
             <CommentIcon size={18} />

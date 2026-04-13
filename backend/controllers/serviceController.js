@@ -3,20 +3,109 @@ const AppError = require('../utils/AppError');
 const { sendResponse, sendPaginatedResponse } = require('../utils/response');
 const QueryBuilder = require('../utils/QueryBuilder');
 
+const CATEGORY_MAP = {
+  tutoring: 'tutoring',
+  freelancing: 'freelancing',
+  'coding-help': 'coding-help',
+  codinghelp: 'coding-help',
+  coding: 'coding-help',
+  'room-rental': 'room-rental',
+  roomrental: 'room-rental',
+  'mess-info': 'mess-info',
+  messinfo: 'mess-info',
+  transport: 'transport',
+  photography: 'photography',
+  'event-planning': 'event-planning',
+  eventplanning: 'event-planning',
+  'event-help': 'event-planning',
+  design: 'design',
+  writing: 'writing',
+  other: 'other',
+};
+
+const PRICING_TYPE_MAP = {
+  fixed: 'fixed',
+  'fixed-price': 'fixed',
+  fixedprice: 'fixed',
+  hourly: 'hourly',
+  'hourly-rate': 'hourly',
+  hourlyrate: 'hourly',
+  negotiable: 'negotiable',
+  free: 'free',
+};
+
+const parseJsonField = (value) => {
+  if (!value) return undefined;
+  if (typeof value === 'object') return value;
+  if (typeof value !== 'string') return undefined;
+  try {
+    return JSON.parse(value);
+  } catch (_) {
+    return undefined;
+  }
+};
+
+const normalizeServiceType = (value) => {
+  const normalized = (value || '').toString().trim().toLowerCase();
+  if (normalized === 'requesting') return 'requesting';
+  return 'offering';
+};
+
+const normalizeCategory = (value) => {
+  const normalized = (value || '').toString().trim().toLowerCase().replace(/\s+/g, '-');
+  return CATEGORY_MAP[normalized] || 'other';
+};
+
+const normalizePricing = (body) => {
+  const parsed = parseJsonField(body.pricing) || {};
+  const legacyType = body.pricingType || body['pricing[type]'];
+  const rawType = parsed.type || legacyType || 'fixed';
+  const typeKey = rawType.toString().trim().toLowerCase().replace(/\s+/g, '-');
+  const type = PRICING_TYPE_MAP[typeKey] || 'fixed';
+
+  const legacyAmount = body.pricingAmount || body.amount || body['pricing[amount]'];
+  const rawAmount = parsed.amount ?? legacyAmount ?? 0;
+  const numericAmount = Number(rawAmount);
+
+  return {
+    type,
+    amount: Number.isFinite(numericAmount) ? Math.max(0, numericAmount) : 0,
+    currency: parsed.currency || body.currency || 'INR',
+  };
+};
+
+const normalizeAvailability = (body) => {
+  const parsed = parseJsonField(body.availability);
+  if (parsed && typeof parsed === 'object') {
+    return {
+      days: Array.isArray(parsed.days) ? parsed.days : [],
+      timeSlots: Array.isArray(parsed.timeSlots) ? parsed.timeSlots : [],
+    };
+  }
+  return undefined;
+};
+
+const normalizeTags = (value) => {
+  if (!value) return undefined;
+  if (Array.isArray(value)) return value.map((t) => `${t}`.trim().toLowerCase()).filter(Boolean);
+  if (typeof value === 'string') return value.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+  return undefined;
+};
+
 exports.createService = async (req, res, next) => {
   try {
+    const normalizedAvailability = normalizeAvailability(req.body);
+    const normalizedTags = normalizeTags(req.body.tags);
+
     const serviceData = {
       ...req.body,
+      category: normalizeCategory(req.body.category),
+      serviceType: normalizeServiceType(req.body.serviceType || req.body.type),
+      pricing: normalizePricing(req.body),
       provider: req.user._id,
     };
 
-    if (req.body.pricing) {
-      serviceData.pricing = typeof req.body.pricing === 'string' ? JSON.parse(req.body.pricing) : req.body.pricing;
-    }
-
-    if (req.body.availability) {
-      serviceData.availability = typeof req.body.availability === 'string' ? JSON.parse(req.body.availability) : req.body.availability;
-    }
+    if (normalizedAvailability) serviceData.availability = normalizedAvailability;
 
     if (req.files && req.files.length > 0) {
       serviceData.images = req.files.map((file) => ({
@@ -25,9 +114,7 @@ exports.createService = async (req, res, next) => {
       }));
     }
 
-    if (req.body.tags && typeof req.body.tags === 'string') {
-      serviceData.tags = req.body.tags.split(',').map((t) => t.trim().toLowerCase());
-    }
+    if (normalizedTags) serviceData.tags = normalizedTags;
 
     const service = await Service.create(serviceData);
     await service.populate('provider', 'firstName lastName avatar rating');
@@ -87,11 +174,39 @@ exports.updateService = async (req, res, next) => {
       return next(new AppError('You can only edit your own services.', 403));
     }
 
-    const allowedFields = ['title', 'description', 'category', 'serviceType', 'pricing', 'availability', 'location', 'tags', 'status'];
+    const allowedFields = ['title', 'description', 'category', 'serviceType', 'location', 'tags', 'status'];
     const updateData = {};
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) updateData[field] = req.body[field];
     });
+
+    if (req.body.category !== undefined) {
+      updateData.category = normalizeCategory(req.body.category);
+    }
+
+    if (req.body.serviceType !== undefined || req.body.type !== undefined) {
+      updateData.serviceType = normalizeServiceType(req.body.serviceType || req.body.type);
+    }
+
+    if (
+      req.body.pricing !== undefined ||
+      req.body.pricingType !== undefined ||
+      req.body.pricingAmount !== undefined ||
+      req.body.amount !== undefined ||
+      req.body['pricing[type]'] !== undefined ||
+      req.body['pricing[amount]'] !== undefined
+    ) {
+      updateData.pricing = normalizePricing(req.body);
+    }
+
+    if (req.body.availability !== undefined) {
+      const normalizedAvailability = normalizeAvailability(req.body);
+      if (normalizedAvailability) updateData.availability = normalizedAvailability;
+    }
+
+    if (req.body.tags !== undefined) {
+      updateData.tags = normalizeTags(req.body.tags) || [];
+    }
 
     if (req.files && req.files.length > 0) {
       const newImages = req.files.map((file) => ({

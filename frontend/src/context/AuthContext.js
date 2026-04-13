@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authAPI } from '../services/api';
+import { authAPI, userAPI } from '../services/api';
 import socketService from '../services/socket';
 
 const AuthContext = createContext(null);
@@ -98,6 +98,45 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const isItemSaved = (itemId, itemType) => {
+    if (!user?.savedItems || !itemId || !itemType) return false;
+    return user.savedItems.some((saved) => {
+      const savedId = typeof saved.item === 'string' ? saved.item : saved.item?._id;
+      return savedId === itemId && saved.itemType === itemType;
+    });
+  };
+
+  const toggleSavedItem = async (itemId, itemType) => {
+    try {
+      const payload = { itemId, itemType };
+      console.log('Saving item:', payload);
+
+      const { data } = await userAPI.saveItem(payload);
+      console.log('Save item response:', data);
+
+      const savedItems = data?.data?.savedItems || [];
+
+      setUser((prev) => {
+        if (!prev) return prev;
+        const listingFavorites = savedItems
+          .filter((saved) => saved.itemType === 'listing')
+          .map((saved) => (typeof saved.item === 'string' ? saved.item : saved.item?._id))
+          .filter(Boolean);
+
+        return {
+          ...prev,
+          savedItems,
+          favorites: listingFavorites,
+        };
+      });
+
+      return data?.data || { saved: false, itemId, itemType, savedItems };
+    } catch (err) {
+      console.log('Save item error:', err?.response || err);
+      throw new Error(err.response?.data?.message || 'Failed to update saved item');
+    }
+  };
+
   const value = {
     user,
     loading,
@@ -107,6 +146,8 @@ export const AuthProvider = ({ children }) => {
     logout,
     updateProfile,
     toggleFavorite,
+    toggleSavedItem,
+    isItemSaved,
     isAuthenticated: !!user,
     clearError: () => setError(null),
     reloadUser: loadUser,

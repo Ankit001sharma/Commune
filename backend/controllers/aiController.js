@@ -1,16 +1,19 @@
 const RecommendationEngine = require('../services/RecommendationEngine');
 const ChatbotService = require('../services/ChatbotService');
 const { sendResponse } = require('../utils/response');
+const User = require('../models/User');
 
 exports.getRecommendations = async (req, res, next) => {
   try {
     const userId = req.user._id;
-    const userFavorites = req.user.favorites || [];
+    const userDoc = await User.findById(userId).select('favorites savedItems');
+    const userFavorites = userDoc?.favorites || [];
+    const userSavedItems = userDoc?.savedItems || [];
     const limit = parseInt(req.query.limit) || 10;
 
     const [listings, services] = await Promise.all([
-      RecommendationEngine.getListingRecommendations(userId, userFavorites, limit),
-      RecommendationEngine.getServiceRecommendations(userId, limit),
+      RecommendationEngine.getListingRecommendations(userId, userFavorites, userSavedItems, limit),
+      RecommendationEngine.getServiceRecommendations(userId, userSavedItems, limit),
     ]);
 
     sendResponse(res, 200, { listings, services }, 'Recommendations generated');

@@ -3,6 +3,32 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const config = require('../config');
 
+const savedItemSchema = new mongoose.Schema(
+  {
+    item: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      refPath: 'savedItems.itemTypeModel',
+    },
+    itemType: {
+      type: String,
+      required: true,
+      enum: ['listing', 'service', 'post'],
+    },
+    itemTypeModel: {
+      type: String,
+      required: true,
+      enum: ['Listing', 'Service', 'Post'],
+    },
+    tags: [{ type: String, lowercase: true, trim: true }],
+    savedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     firstName: {
@@ -78,6 +104,7 @@ const userSchema = new mongoose.Schema(
         ref: 'Listing',
       },
     ],
+    savedItems: [savedItemSchema],
     rating: {
       average: { type: Number, default: 0, min: 0, max: 5 },
       count: { type: Number, default: 0 },
@@ -109,6 +136,7 @@ userSchema.virtual('fullName').get(function () {
 userSchema.index({ email: 1 });
 userSchema.index({ rollNumber: 1 });
 userSchema.index({ college: 1 });
+userSchema.index({ _id: 1, 'savedItems.item': 1, 'savedItems.itemType': 1 });
 
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();

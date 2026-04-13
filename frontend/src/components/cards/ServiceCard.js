@@ -1,9 +1,24 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { StarIcon, EyeIcon, MapPinIcon } from '../Icons';
+import { StarIcon, EyeIcon, MapPinIcon, HeartIcon, HeartFilledIcon } from '../Icons';
+import { useAuth } from '../../context/AuthContext';
+import { toast } from '../ui/Toast';
 
 const ServiceCard = ({ service }) => {
   const navigate = useNavigate();
+  const { isAuthenticated, toggleSavedItem, isItemSaved } = useAuth();
+
+  const isSaved = isItemSaved(service._id, 'service');
+
+  const handleSave = async (e) => {
+    e.stopPropagation();
+    if (!isAuthenticated) return navigate('/login');
+    try {
+      await toggleSavedItem(service._id, 'service');
+    } catch (error) {
+      toast.error(error.message || 'Failed to update saved state');
+    }
+  };
 
   const getInitials = (provider) => {
     if (!provider) return '??';
@@ -53,9 +68,18 @@ const ServiceCard = ({ service }) => {
           </div>
           <span>{service.provider?.firstName} {service.provider?.lastName}</span>
         </div>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: 'var(--cx-text-muted)' }}>
-          <EyeIcon size={14} /> {service.views || 0}
-        </span>
+        <div className="card-actions">
+          <button
+            className={`card-action-btn ${isSaved ? 'favorited' : ''}`}
+            onClick={handleSave}
+            title={isSaved ? 'Saved' : 'Save'}
+          >
+            {isSaved ? <HeartFilledIcon size={16} /> : <HeartIcon size={16} />}
+          </button>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: 'var(--cx-text-muted)' }}>
+            <EyeIcon size={14} /> {service.views || 0}
+          </span>
+        </div>
       </div>
     </div>
   );

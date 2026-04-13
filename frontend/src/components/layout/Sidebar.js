@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
   HomeIcon, ShoppingBagIcon, BriefcaseIcon, UsersIcon,
   MessageCircleIcon, CreditCardIcon, DashboardIcon,
-  LogOutIcon, ZapIcon
+  LogOutIcon, ZapIcon, HeartIcon
 } from '../Icons';
 
 const navItems = [
@@ -16,6 +16,7 @@ const navItems = [
   { label: 'PERSONAL', type: 'section' },
   { to: '/chat', icon: MessageCircleIcon, label: 'Messages' },
   { to: '/transactions', icon: CreditCardIcon, label: 'Transactions' },
+  { to: '/saved-items', icon: HeartIcon, label: 'Saved Items' },
   { to: '/dashboard', icon: DashboardIcon, label: 'Dashboard' },
   { label: 'AI', type: 'section' },
   { to: '/ai-search', icon: ZapIcon, label: 'Smart Search' },

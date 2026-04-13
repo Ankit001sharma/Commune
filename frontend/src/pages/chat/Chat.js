@@ -21,11 +21,25 @@ const Chat = () => {
   const [search, setSearch] = useState('');
   const [typingUsers, setTypingUsers] = useState({});
 
-  const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const shouldAutoScrollRef = useRef(true);
+  const isFirstRenderRef = useRef(true);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const isNearBottom = (el) => {
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+  };
+
+  const scrollToBottom = (behavior = 'smooth') => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior });
+  };
+
+  const handleMessagesScroll = () => {
+    const container = messagesContainerRef.current;
+    shouldAutoScrollRef.current = isNearBottom(container);
   };
 
   // Fetch conversations list
@@ -55,6 +69,8 @@ const Chat = () => {
         const { data } = await chatAPI.getConversation(activeId);
         setActiveConversation(data.data);
         setMessages(data.data.messages || []);
+        shouldAutoScrollRef.current = true;
+        isFirstRenderRef.current = true;
         socketService.joinConversation(activeId);
         socketService.markAsRead(activeId);
       } catch (err) {
@@ -69,7 +85,14 @@ const Chat = () => {
   }, [activeId]);
 
   useEffect(() => {
-    scrollToBottom();
+    if (!messagesContainerRef.current || messages.length === 0) return;
+    if (!shouldAutoScrollRef.current) return;
+
+    const behavior = isFirstRenderRef.current ? 'auto' : 'smooth';
+    requestAnimationFrame(() => {
+      scrollToBottom(behavior);
+      isFirstRenderRef.current = false;
+    });
   }, [messages]);
 
   // Socket event listeners
@@ -123,6 +146,7 @@ const Chat = () => {
       const { data } = await chatAPI.sendMessage(activeId, { content: newMessage.trim() });
       // Socket will broadcast to other participants
       socketService.sendMessage(activeId, data.data);
+      shouldAutoScrollRef.current = true;
       setMessages((prev) => [...prev, data.data]);
       setNewMessage('');
       socketService.stopTyping(activeId);
@@ -293,7 +317,11 @@ const Chat = () => {
             </div>
 
             {/* Messages */}
-            <div className="chat-messages">
+            <div
+              className="chat-messages"
+              ref={messagesContainerRef}
+              onScroll={handleMessagesScroll}
+            >
               {messages.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: 40, color: 'var(--cx-text-muted)' }}>
                   <MessageCircleIcon size={40} />
@@ -313,7 +341,6 @@ const Chat = () => {
                   );
                 })
               )}
-              <div ref={messagesEndRef} />
             </div>
 
             {/* Message Input */}

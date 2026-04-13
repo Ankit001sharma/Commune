@@ -10,10 +10,12 @@ const CATEGORIES = [
   { value: 'freelancing', label: 'Freelancing' },
   { value: 'coding-help', label: 'Coding Help' },
   { value: 'room-rental', label: 'Room Rental' },
-  { value: 'event-help', label: 'Event Help' },
-  { value: 'delivery', label: 'Delivery' },
-  { value: 'repair', label: 'Repair' },
+  { value: 'mess-info', label: 'Mess Info' },
+  { value: 'transport', label: 'Transport' },
+  { value: 'photography', label: 'Photography' },
+  { value: 'event-planning', label: 'Event Planning' },
   { value: 'design', label: 'Design' },
+  { value: 'writing', label: 'Writing' },
   { value: 'other', label: 'Other' },
 ];
 

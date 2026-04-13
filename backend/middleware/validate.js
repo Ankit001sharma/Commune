@@ -57,8 +57,26 @@ const validateService = (req, res, next) => {
   const errors = [];
 
   if (!title || title.trim().length < 3) errors.push('Title must be at least 3 characters');
-  if (!description || description.trim().length < 10) errors.push('Description must be at least 10 characters');
+  if (!description || description.trim().length < 2) errors.push('Description must be at least 10 characters');
   if (!category) errors.push('Category is required');
+
+  if (errors.length > 0) {
+    return res.status(400).json({ status: 'fail', message: errors.join('. ') });
+  }
+  next();
+};
+
+const validateSaveItem = (req, res, next) => {
+  const { itemId, itemType } = req.body;
+  const errors = [];
+
+  if (!itemId || !/^[0-9a-fA-F]{24}$/.test(itemId)) {
+    errors.push('Valid itemId is required');
+  }
+
+  if (!itemType || !['listing', 'service', 'post'].includes(`${itemType}`.toLowerCase().trim())) {
+    errors.push('itemType must be listing, service, or post');
+  }
 
   if (errors.length > 0) {
     return res.status(400).json({ status: 'fail', message: errors.join('. ') });
@@ -94,6 +112,7 @@ module.exports = {
   validateLogin,
   validateListing,
   validateService,
+  validateSaveItem,
   validatePost,
   validateObjectId,
 };

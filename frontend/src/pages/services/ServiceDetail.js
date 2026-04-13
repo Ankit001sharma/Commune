@@ -5,14 +5,14 @@ import { useAuth } from '../../context/AuthContext';
 import {
   MapPinIcon, ClockIcon, EyeIcon, TagIcon, StarIcon,
   MessageCircleIcon, EditIcon, TrashIcon, ChevronRightIcon,
-  DollarIcon,
+  DollarIcon, HeartIcon, HeartFilledIcon,
 } from '../../components/Icons';
 import { toast } from '../../components/ui/Toast';
 
 const ServiceDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, toggleSavedItem, isItemSaved } = useAuth();
 
   const [service, setService] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -34,6 +34,7 @@ const ServiceDetail = () => {
   }, [id, navigate]);
 
   const isOwner = user?._id === service?.provider?._id;
+  const isSaved = service ? isItemSaved(service._id, 'service') : false;
 
   const handleDelete = async () => {
     if (!window.confirm('Are you sure you want to delete this service?')) return;
@@ -78,6 +79,15 @@ const ServiceDetail = () => {
     }
   };
 
+  const handleSave = async () => {
+    if (!isAuthenticated) return navigate('/login');
+    try {
+      await toggleSavedItem(service._id, 'service');
+    } catch (err) {
+      toast.error(err.message || 'Failed to update saved state');
+    }
+  };
+
   const getInitials = (u) => {
     if (!u) return '??';
     return `${u.firstName?.[0] || ''}${u.lastName?.[0] || ''}`.toUpperCase();
@@ -102,6 +112,39 @@ const ServiceDetail = () => {
     const days = Math.floor(hours / 24);
     if (days < 30) return `${days}d ago`;
     return new Date(dateStr).toLocaleDateString();
+  };
+
+  const formatAvailability = (availability) => {
+    if (!availability) return '';
+    if (typeof availability === 'string') return availability;
+
+    const dayOrder = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    const dayLabels = {
+      mon: 'Mon',
+      tue: 'Tue',
+      wed: 'Wed',
+      thu: 'Thu',
+      fri: 'Fri',
+      sat: 'Sat',
+      sun: 'Sun',
+    };
+
+    const days = Array.isArray(availability.days) ? availability.days : [];
+    const orderedDays = dayOrder.filter((day) => days.includes(day));
+    const dayText = orderedDays.map((d) => dayLabels[d]).join(', ');
+
+    const timeSlots = Array.isArray(availability.timeSlots) ? availability.timeSlots : [];
+    const timeText = timeSlots
+      .map((slot) => {
+        if (!slot?.start && !slot?.end) return '';
+        if (slot?.start && slot?.end) return `${slot.start} - ${slot.end}`;
+        return slot?.start || slot?.end || '';
+      })
+      .filter(Boolean)
+      .join(', ');
+
+    if (dayText && timeText) return `${dayText} (${timeText})`;
+    return dayText || timeText || '';
   };
 
   if (loading) {
@@ -161,10 +204,10 @@ const ServiceDetail = () => {
               <p className="detail-description">{service.description}</p>
             </div>
 
-            {service.availability && (
+            {service.availability && formatAvailability(service.availability) && (
               <div className="detail-section">
                 <h3>Availability</h3>
-                <p className="detail-description">{service.availability}</p>
+                <p className="detail-description">{formatAvailability(service.availability)}</p>
               </div>
             )}
 
@@ -219,6 +262,9 @@ const ServiceDetail = () => {
               <>
                 <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleContact}>
                   <MessageCircleIcon size={18} /> Contact Provider
+                </button>
+                <button className={`btn ${isSaved ? 'btn-secondary' : 'btn-ghost'}`} style={{ width: '100%' }} onClick={handleSave}>
+                  {isSaved ? <HeartFilledIcon size={18} /> : <HeartIcon size={18} />} {isSaved ? 'Saved' : 'Save'}
                 </button>
                 {service.serviceType === 'offering' && service.pricing?.type !== 'free' && (
                   <button className="btn btn-secondary" style={{ width: '100%' }} onClick={handleHire}>

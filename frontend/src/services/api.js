@@ -58,6 +58,13 @@ export const authAPI = {
   getUserProfile: (id) => api.get(`/auth/profile/${id}`),
 };
 
+// ===== Users =====
+export const userAPI = {
+  saveItem: (payload) => api.post('/users/save-item', payload),
+  getSavedItems: () => api.get('/users/saved-items'),
+  getActivity: (params) => api.get('/users/activity', { params }),
+};
+
 // ===== Listings =====
 export const listingAPI = {
   getAll: (params) => api.get('/listings', { params }),
@@ -113,6 +120,7 @@ export const transactionAPI = {
 // ===== AI =====
 export const aiAPI = {
   getRecommendations: (params) => api.get('/ai/recommendations', { params }),
+  getRecommendationsV2: (params) => api.get('/recommendations', { params }),
   search: (q, type) => api.get('/ai/search', { params: { q, type } }),
   chatbot: (message) => api.post('/ai/chatbot', { message }),
 };

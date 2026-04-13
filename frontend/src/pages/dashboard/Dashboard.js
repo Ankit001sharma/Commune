@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listingAPI, serviceAPI, transactionAPI, chatAPI } from '../../services/api';
+import { listingAPI, serviceAPI, transactionAPI, chatAPI, userAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import ListingCard from '../../components/cards/ListingCard';
 import ServiceCard from '../../components/cards/ServiceCard';
 import {
   ShoppingBagIcon, BriefcaseIcon, CreditCardIcon, MessageCircleIcon,
   WalletIcon, PlusIcon, StarIcon,
-  ChevronRightIcon, EditIcon,
+  ChevronRightIcon, EditIcon, ZapIcon,
 } from '../../components/Icons';
 import { toast } from '../../components/ui/Toast';
 
@@ -20,6 +20,7 @@ const Dashboard = () => {
     services: 0,
     transactions: 0,
     unreadMessages: 0,
+    activities: 0,
   });
   const [myListings, setMyListings] = useState([]);
   const [myServices, setMyServices] = useState([]);
@@ -40,17 +41,22 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [listingsRes, servicesRes, txRes, unreadRes] = await Promise.allSettled([
+        const [listingsRes, servicesRes, txRes, unreadRes, activityRes] = await Promise.allSettled([
           listingAPI.getMy(),
           serviceAPI.getMy(),
           transactionAPI.getAll(),
           chatAPI.getUnreadCount(),
+          userAPI.getActivity(),
         ]);
 
         const listings = listingsRes.status === 'fulfilled' ? listingsRes.value.data.data || [] : [];
         const services = servicesRes.status === 'fulfilled' ? servicesRes.value.data.data || [] : [];
         const transactions = txRes.status === 'fulfilled' ? txRes.value.data.data || [] : [];
         const unread = unreadRes.status === 'fulfilled' ? unreadRes.value.data.data?.count || 0 : 0;
+        const activityPayload = activityRes.status === 'fulfilled' ? activityRes.value.data.data || {} : {};
+        const likes = Array.isArray(activityPayload.likes) ? activityPayload.likes : [];
+        const comments = Array.isArray(activityPayload.comments) ? activityPayload.comments : [];
+        const activityCount = likes.length + comments.length;
 
         setMyListings(listings);
         setMyServices(services);
@@ -60,6 +66,7 @@ const Dashboard = () => {
           services: services.length,
           transactions: transactions.length,
           unreadMessages: unread,
+          activities: activityCount,
         });
       } catch (err) {
         console.error('Dashboard fetch error:', err);
@@ -128,7 +135,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Top Stats */}
       <div className="stats-grid">
         <div className="stat-card" onClick={() => setActiveTab('listings')} style={{ cursor: 'pointer' }}>
           <div className="stat-icon" style={{ background: 'var(--cx-primary-light)' }}>
@@ -139,6 +146,7 @@ const Dashboard = () => {
             <div className="stat-label">My Listings</div>
           </div>
         </div>
+
         <div className="stat-card" onClick={() => setActiveTab('services')} style={{ cursor: 'pointer' }}>
           <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--cx-success)' }}>
             <BriefcaseIcon size={24} />
@@ -148,6 +156,7 @@ const Dashboard = () => {
             <div className="stat-label">My Services</div>
           </div>
         </div>
+
         <div className="stat-card" onClick={() => navigate('/transactions')} style={{ cursor: 'pointer' }}>
           <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--cx-warning)' }}>
             <CreditCardIcon size={24} />
@@ -157,6 +166,7 @@ const Dashboard = () => {
             <div className="stat-label">Transactions</div>
           </div>
         </div>
+
         <div className="stat-card" onClick={() => navigate('/chat')} style={{ cursor: 'pointer' }}>
           <div className="stat-icon" style={{ background: 'rgba(59, 130, 246, 0.1)', color: 'var(--cx-secondary)' }}>
             <MessageCircleIcon size={24} />
@@ -164,6 +174,16 @@ const Dashboard = () => {
           <div className="stat-info">
             <div className="stat-value">{stats.unreadMessages}</div>
             <div className="stat-label">Unread Messages</div>
+          </div>
+        </div>
+
+        <div className="stat-card" onClick={() => navigate('/activity')} style={{ cursor: 'pointer' }}>
+          <div className="stat-icon" style={{ background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed' }}>
+            <ZapIcon size={24} />
+          </div>
+          <div className="stat-info">
+            <div className="stat-value">{stats.activities}</div>
+            <div className="stat-label">Activities</div>
           </div>
         </div>
       </div>

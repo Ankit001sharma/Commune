@@ -1,6 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ThumbsUpIcon, CommentIcon, EyeIcon, ClockIcon } from '../Icons';
+import { ThumbsUpIcon, CommentIcon, EyeIcon, ClockIcon, HeartIcon, HeartFilledIcon } from '../Icons';
+import { useAuth } from '../../context/AuthContext';
+import { toast } from '../ui/Toast';
 
 const typeColors = {
   'announcement': 'badge-primary',
@@ -20,6 +22,8 @@ const typeLabels = {
 
 const PostCard = ({ post, onLike }) => {
   const navigate = useNavigate();
+  const { isAuthenticated, toggleSavedItem, isItemSaved } = useAuth();
+  const isSaved = isItemSaved(post._id, 'post');
 
   const getInitials = (author) => {
     if (!author) return '??';
@@ -36,6 +40,16 @@ const PostCard = ({ post, onLike }) => {
     const days = Math.floor(hours / 24);
     if (days < 7) return `${days}d ago`;
     return new Date(dateStr).toLocaleDateString();
+  };
+
+  const handleSave = async (e) => {
+    e.stopPropagation();
+    if (!isAuthenticated) return navigate('/login');
+    try {
+      await toggleSavedItem(post._id, 'post');
+    } catch (error) {
+      toast.error(error.message || 'Failed to update saved state');
+    }
   };
 
   return (
@@ -72,6 +86,10 @@ const PostCard = ({ post, onLike }) => {
         >
           <ThumbsUpIcon size={18} />
           <span>{post.likes?.length || 0}</span>
+        </button>
+        <button className={`post-action-btn ${isSaved ? 'liked' : ''}`} onClick={handleSave}>
+          {isSaved ? <HeartFilledIcon size={18} /> : <HeartIcon size={18} />}
+          <span>{isSaved ? 'Saved' : 'Save'}</span>
         </button>
         <button className="post-action-btn">
           <CommentIcon size={18} />

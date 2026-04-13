@@ -35,8 +35,9 @@ import Transactions, { TransactionDetail } from './pages/transactions/Transactio
 
 // AI Search
 import AISearch from './pages/ai/AISearch';
-
 import Notifications from './pages/notifications/Notifications';
+import SavedItems from './pages/saved/SavedItems';
+import Activity from './pages/activity/Activity';
 
 // Protected Route wrapper
 const ProtectedRoute = ({ children }) => {
@@ -81,75 +82,55 @@ const App = () => {
   return (
     <>
       <Routes>
-        {/* Auth routes (no layout) */}
+        {/* Public Auth routes (no layout) */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
-        {/* App routes (with layout) */}
-        <Route element={<AppLayout />}>
-          {/* Home redirects to marketplace */}
-          {/* <Route path="/" element={<Navigate to="/marketplace" replace />} /> */}
-          {<Route path="/" element={<Home />} />}
+        {/* Main App routes wrapped in ProtectedRoute. 
+          If isAuthenticated is false, everything inside here redirects to /login.
+        */}
+        <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+          
+          <Route path="/" element={<Home />} />
+          
           {/* Marketplace */}
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/marketplace/:id" element={<ListingDetail />} />
-          <Route path="/marketplace/create" element={
-            <ProtectedRoute><CreateListing /></ProtectedRoute>
-          } />
-          <Route path="/marketplace/edit/:id" element={
-            <ProtectedRoute><CreateListing /></ProtectedRoute>
-          } />
+          <Route path="/marketplace/create" element={<CreateListing />} />
+          <Route path="/marketplace/edit/:id" element={<CreateListing />} />
 
           {/* Services */}
           <Route path="/services" element={<Services />} />
           <Route path="/services/:id" element={<ServiceDetail />} />
-          <Route path="/services/create" element={
-            <ProtectedRoute><CreateService /></ProtectedRoute>
-          } />
-          <Route path="/services/edit/:id" element={
-            <ProtectedRoute><CreateService /></ProtectedRoute>
-          } />
+          <Route path="/services/create" element={<CreateService />} />
+          <Route path="/services/edit/:id" element={<CreateService />} />
 
           {/* Community */}
           <Route path="/community" element={<Community />} />
           <Route path="/community/:id" element={<PostDetail />} />
-          <Route path="/community/create" element={
-            <ProtectedRoute><CreatePost /></ProtectedRoute>
-          } />
-          <Route path="/community/edit/:id" element={
-            <ProtectedRoute><CreatePost /></ProtectedRoute>
-          } />
+          <Route path="/community/create" element={<CreatePost />} />
+          <Route path="/community/edit/:id" element={<CreatePost />} />
 
           {/* Chat */}
-          <Route path="/chat" element={
-            <ProtectedRoute><Chat /></ProtectedRoute>
-          } />
-          <Route path="/chat/:id" element={
-            <ProtectedRoute><Chat /></ProtectedRoute>
-          } />
+          <Route path="/chat" element={<Chat />} />
+          <Route path="/chat/:id" element={<Chat />} />
 
           {/* Dashboard */}
-          <Route path="/dashboard" element={
-            <ProtectedRoute><Dashboard /></ProtectedRoute>
-          } />
+          <Route path="/dashboard" element={<Dashboard />} />
 
           {/* Transactions */}
-          <Route path="/transactions" element={
-            <ProtectedRoute><Transactions /></ProtectedRoute>
-          } />
-          <Route path="/transactions/:id" element={
-            <ProtectedRoute><TransactionDetail /></ProtectedRoute>
-          } />
+          <Route path="/transactions" element={<Transactions />} />
+          <Route path="/transactions/:id" element={<TransactionDetail />} />
 
-          {/* AI Search */}
+          {/* AI Search & Notifications */}
           <Route path="/ai-search" element={<AISearch />} />
-
           <Route path="/notifications" element={<Notifications />} />
-
-          {/* Catch all */}
-          {/* <Route path="*" element={<Navigate to="/marketplace" replace />} /> */}
-          <Route path="/" element={<Home />} />
+          <Route path="/saved-items" element={<SavedItems />} />
+          <Route path="/activity" element={<Activity />} />
         </Route>
+
+        {/* Global Catch-all redirect */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
       {/* AI Chatbot - floating on all pages */}

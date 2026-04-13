@@ -92,7 +92,12 @@ exports.refreshToken = async (req, res, next) => {
 
 exports.getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id).populate('favorites');
+    const user = await User.findById(req.user._id)
+      .populate('favorites')
+      .populate({
+        path: 'savedItems.item',
+        select: 'title content type price pricing images category location tags status serviceType author',
+      });
     sendResponse(res, 200, user);
   } catch (error) {
     next(error);

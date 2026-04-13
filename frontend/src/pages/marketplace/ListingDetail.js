@@ -15,7 +15,7 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const ListingDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, isAuthenticated, toggleFavorite } = useAuth();
+  const { user, isAuthenticated, toggleSavedItem, isItemSaved } = useAuth();
 
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,17 +37,17 @@ const ListingDetail = () => {
     fetchListing();
   }, [id, navigate]);
 
-  const isFavorited = user?.favorites?.some(
-    (f) => (typeof f === 'string' ? f : f._id) === listing?._id
-  );
+  const isFavorited = listing ? isItemSaved(listing._id, 'listing') : false;
 
   const isOwner = user?._id === listing?.seller?._id;
 
   const handleFavorite = async () => {
     if (!isAuthenticated) return navigate('/login');
     try {
-      await toggleFavorite(listing._id);
-    } catch (_) {}
+      await toggleSavedItem(listing._id, 'listing');
+    } catch (error) {
+      toast.error(error.message || 'Failed to update saved state');
+    }
   };
 
   const handleDelete = async () => {

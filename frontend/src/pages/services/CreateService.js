@@ -9,10 +9,12 @@ const CATEGORIES = [
   { value: 'freelancing', label: 'Freelancing' },
   { value: 'coding-help', label: 'Coding Help' },
   { value: 'room-rental', label: 'Room Rental' },
-  { value: 'event-help', label: 'Event Help' },
-  { value: 'delivery', label: 'Delivery' },
-  { value: 'repair', label: 'Repair' },
+  { value: 'mess-info', label: 'Mess Info' },
+  { value: 'transport', label: 'Transport' },
+  { value: 'photography', label: 'Photography' },
+  { value: 'event-planning', label: 'Event Planning' },
   { value: 'design', label: 'Design' },
+  { value: 'writing', label: 'Writing' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -22,6 +24,130 @@ const PRICING_TYPES = [
   { value: 'negotiable', label: 'Negotiable' },
   { value: 'free', label: 'Free' },
 ];
+
+const VALID_CATEGORIES = new Set(CATEGORIES.map((c) => c.value));
+const VALID_SERVICE_TYPES = new Set(['offering', 'requesting']);
+const VALID_PRICING_TYPES = new Set(PRICING_TYPES.map((p) => p.value));
+
+const DAY_NAME_TO_CODE = {
+  monday: 'mon',
+  mon: 'mon',
+  tuesday: 'tue',
+  tue: 'tue',
+  wednesday: 'wed',
+  wed: 'wed',
+  thursday: 'thu',
+  thu: 'thu',
+  friday: 'fri',
+  fri: 'fri',
+  saturday: 'sat',
+  sat: 'sat',
+  sunday: 'sun',
+  sun: 'sun',
+};
+
+const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri'];
+const WEEKENDS = ['sat', 'sun'];
+const ALL_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+const normalizeCategory = (value) => {
+  const raw = (value || '').toString().trim().toLowerCase();
+  if (!raw) return 'other';
+
+  const slug = raw.replace(/\s+/g, '-');
+  if (VALID_CATEGORIES.has(slug)) return slug;
+
+  if (slug === 'coding') return 'coding-help';
+  if (slug === 'event-help') return 'event-planning';
+  return 'other';
+};
+
+const normalizeServiceType = (value) => {
+  const normalized = (value || '').toString().trim().toLowerCase();
+  if (VALID_SERVICE_TYPES.has(normalized)) return normalized;
+  return 'offering';
+};
+
+const normalizePricingType = (value) => {
+  const normalized = (value || '').toString().trim().toLowerCase().replace(/\s+/g, '-');
+  const aliasMap = {
+    'fixed-price': 'fixed',
+    fixedprice: 'fixed',
+    'hourly-rate': 'hourly',
+    hourlyrate: 'hourly',
+  };
+  const mapped = aliasMap[normalized] || normalized;
+  if (VALID_PRICING_TYPES.has(mapped)) return mapped;
+  return 'fixed';
+};
+
+const parseAvailabilityInput = (value) => {
+  const raw = (value || '').toString().trim();
+  if (!raw) return { days: [] };
+
+  const lowered = raw.toLowerCase();
+  if (lowered === 'weekends' || lowered === 'weekend') return { days: WEEKENDS };
+  if (lowered === 'weekdays' || lowered === 'weekday') return { days: WEEKDAYS };
+  if (lowered === 'daily' || lowered === 'all days' || lowered === 'everyday') return { days: ALL_DAYS };
+
+  const tokens = lowered.split(/[,\s]+/).filter(Boolean);
+  const days = [...new Set(tokens.map((t) => DAY_NAME_TO_CODE[t]).filter(Boolean))];
+  return { days };
+};
+
+const getAvailabilityInputValue = (availability) => {
+  if (!availability) return '';
+  if (typeof availability === 'string') return availability;
+
+  const days = Array.isArray(availability.days) ? availability.days : [];
+  const sortedDays = [...days].sort();
+  const isWeekdays = WEEKDAYS.every((d) => sortedDays.includes(d)) && sortedDays.length === WEEKDAYS.length;
+  const isWeekends = WEEKENDS.every((d) => sortedDays.includes(d)) && sortedDays.length === WEEKENDS.length;
+  const isAllDays = ALL_DAYS.every((d) => sortedDays.includes(d)) && sortedDays.length === ALL_DAYS.length;
+
+  if (isAllDays) return 'Daily';
+  if (isWeekdays) return 'Weekdays';
+  if (isWeekends) return 'Weekends';
+  return days.join(', ');
+};
+
+const buildServiceFormData = (form) => {
+  const normalizedPricingType = normalizePricingType(form.pricingType);
+  const normalizedAmount =
+    normalizedPricingType === 'fixed' || normalizedPricingType === 'hourly'
+      ? Number(form.pricingAmount || 0)
+      : 0;
+
+  const payload = {
+    title: form.title.trim(),
+    description: form.description.trim(),
+    category: normalizeCategory(form.category),
+    serviceType: normalizeServiceType(form.serviceType),
+    pricing: {
+      type: normalizedPricingType,
+      amount: Number.isFinite(normalizedAmount) ? Math.max(0, normalizedAmount) : 0,
+      currency: 'INR',
+    },
+    availability: parseAvailabilityInput(form.availability),
+    location: form.location.trim() || 'Campus',
+    tags: form.tags
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean),
+  };
+
+  const formData = new FormData();
+  formData.append('title', payload.title);
+  formData.append('description', payload.description);
+  formData.append('category', payload.category);
+  formData.append('serviceType', payload.serviceType);
+  formData.append('pricing', JSON.stringify(payload.pricing));
+  formData.append('availability', JSON.stringify(payload.availability));
+  formData.append('location', payload.location);
+  if (payload.tags.length > 0) formData.append('tags', payload.tags.join(','));
+
+  return formData;
+};
 
 const CreateService = () => {
   const navigate = useNavigate();
@@ -61,7 +187,7 @@ const CreateService = () => {
             pricingType: s.pricing?.type || 'fixed',
             pricingAmount: s.pricing?.amount?.toString() || '',
             location: s.location || '',
-            availability: s.availability || '',
+            availability: getAvailabilityInputValue(s.availability),
             tags: s.tags?.join(', ') || '',
           });
         } catch (err) {
@@ -89,21 +215,7 @@ const CreateService = () => {
 
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('title', form.title.trim());
-      formData.append('description', form.description.trim());
-      formData.append('category', form.category);
-      formData.append('serviceType', form.serviceType);
-      formData.append('pricing[type]', form.pricingType);
-      if (form.pricingType !== 'free' && form.pricingType !== 'negotiable') {
-        formData.append('pricing[amount]', form.pricingAmount || '0');
-      }
-      if (form.location.trim()) formData.append('location', form.location.trim());
-      if (form.availability.trim()) formData.append('availability', form.availability.trim());
-      if (form.tags.trim()) {
-        const tags = form.tags.split(',').map((t) => t.trim()).filter(Boolean);
-        tags.forEach((t) => formData.append('tags', t));
-      }
+      const formData = buildServiceFormData(form);
 
       if (isEdit) {
         await serviceAPI.update(id, formData);

@@ -2,25 +2,25 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HeartIcon, HeartFilledIcon, EyeIcon, ImageIcon } from '../Icons';
 import { useAuth } from '../../context/AuthContext';
+import { toast } from '../ui/Toast';
 import AppImage from "../common/AppImage";
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 const ListingCard = ({ listing }) => {
-  const { user, isAuthenticated, toggleFavorite } = useAuth();
+  const { isAuthenticated, toggleSavedItem, isItemSaved } = useAuth();
   const navigate = useNavigate();
 
-  // Check if favorited
-  const isFavorited = user?.favorites?.some(
-    (f) => (typeof f === 'string' ? f : f._id) === listing._id
-  );
+  const isFavorited = isItemSaved(listing._id, 'listing');
 
   const handleFavorite = async (e) => {
     e.stopPropagation();
     if (!isAuthenticated) return navigate('/login');
     try {
-      await toggleFavorite(listing._id);
-    } catch (_) {}
+      await toggleSavedItem(listing._id, 'listing');
+    } catch (error) {
+      toast.error(error.message || 'Failed to update saved state');
+    }
   };
 
   const getInitials = (seller) => {
