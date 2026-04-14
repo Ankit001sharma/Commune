@@ -5,6 +5,8 @@ const QueryBuilder = require('../utils/QueryBuilder');
 
 exports.createPost = async (req, res, next) => {
   try {
+    console.log('FILES:', req.files);
+
     const postData = {
       ...req.body,
       author: req.user._id,
@@ -12,8 +14,7 @@ exports.createPost = async (req, res, next) => {
 
     if (req.files && req.files.length > 0) {
       postData.images = req.files.map((file) => ({
-        url: `/uploads/${file.filename}`,
-        thumbnail: `/uploads/${file.filename}`,
+        url: file.path,
       }));
     }
 

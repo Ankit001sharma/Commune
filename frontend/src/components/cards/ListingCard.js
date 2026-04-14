@@ -4,8 +4,7 @@ import { HeartIcon, HeartFilledIcon, EyeIcon, ImageIcon } from '../Icons';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from '../ui/Toast';
 import AppImage from "../common/AppImage";
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+import { resolveImageUrl } from '../../utils/image';
 
 const ListingCard = ({ listing }) => {
   const { isAuthenticated, toggleSavedItem, isItemSaved } = useAuth();
@@ -28,9 +27,7 @@ const ListingCard = ({ listing }) => {
     return `${seller.firstName?.[0] || ''}${seller.lastName?.[0] || ''}`.toUpperCase();
   };
 
-  const imageUrl = listing.images?.[0]?.url
-    ? `${API_URL}${listing.images[0].url}`
-    : null;
+  const imageUrl = resolveImageUrl(listing.images?.[0]?.url);
 
   return (
     <div

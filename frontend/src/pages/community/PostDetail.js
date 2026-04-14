@@ -7,6 +7,7 @@ import {
   TrashIcon, ChevronRightIcon, SendIcon, EditIcon, HeartIcon, HeartFilledIcon,
 } from '../../components/Icons';
 import { toast } from '../../components/ui/Toast';
+import { resolveImageUrl } from '../../utils/image';
 
 const typeColors = {
   announcement: 'badge-primary',
@@ -180,6 +181,19 @@ const PostDetail = () => {
         <div style={{ fontSize: '0.95rem', lineHeight: 1.8, color: 'var(--cx-text-secondary)', whiteSpace: 'pre-wrap', marginBottom: 16 }}>
           {post.content}
         </div>
+
+        {post.images?.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 16 }}>
+            {post.images.map((image, index) => (
+              <img
+                key={`${image.url}-${index}`}
+                src={resolveImageUrl(image.url)}
+                alt={`Post ${index + 1}`}
+                style={{ width: '100%', height: 170, objectFit: 'cover', borderRadius: 8 }}
+              />
+            ))}
+          </div>
+        )}
 
         {post.tags?.length > 0 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>

@@ -4,8 +4,7 @@ import { userAPI } from '../../services/api';
 import { HeartFilledIcon, MapPinIcon, TagIcon } from '../../components/Icons';
 import AppImage from '../../components/common/AppImage';
 import { toast } from '../../components/ui/Toast';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+import { resolveImageUrl } from '../../utils/image';
 
 const SavedItems = () => {
   const navigate = useNavigate();
@@ -84,9 +83,7 @@ const SavedItems = () => {
     const item = entry.item;
     if (!item) return null;
 
-    const image = item.images?.[0]?.url
-      ? `${API_URL}${item.images[0].url}`
-      : null;
+    const image = resolveImageUrl(item.images?.[0]?.url);
 
     const tags = (entry.tags || []).slice(0, 4);
 

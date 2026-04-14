@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from "react";
 
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/notifications", {
+    fetch(`${API_BASE}/notifications`, {
       headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`, // 🔥 IMPORTANT
+        Authorization: `Bearer ${localStorage.getItem('cx_token')}`,
       },
     })
       .then((res) => res.json())

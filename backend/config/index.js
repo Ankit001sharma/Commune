@@ -15,5 +15,11 @@ module.exports = {
     path: process.env.UPLOAD_PATH || './uploads',
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024,
   },
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    apiSecret: process.env.CLOUDINARY_API_SECRET,
+    folder: process.env.CLOUDINARY_FOLDER || 'communex',
+  },
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
 };

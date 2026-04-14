@@ -113,7 +113,7 @@ exports.updateMe = async (req, res, next) => {
     });
 
     if (req.file) {
-      updateData.avatar = `/uploads/${req.file.filename}`;
+      updateData.avatar = req.file.path;
     }
 
     const user = await User.findByIdAndUpdate(req.user._id, updateData, {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { serviceAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { XIcon, PlusIcon } from '../../components/Icons';
 import { toast } from '../../components/ui/Toast';
 
 const CATEGORIES = [
@@ -111,7 +112,7 @@ const getAvailabilityInputValue = (availability) => {
   return days.join(', ');
 };
 
-const buildServiceFormData = (form) => {
+const buildServiceFormData = (form, images = []) => {
   const normalizedPricingType = normalizePricingType(form.pricingType);
   const normalizedAmount =
     normalizedPricingType === 'fixed' || normalizedPricingType === 'hourly'
@@ -145,6 +146,7 @@ const buildServiceFormData = (form) => {
   formData.append('availability', JSON.stringify(payload.availability));
   formData.append('location', payload.location);
   if (payload.tags.length > 0) formData.append('tags', payload.tags.join(','));
+  images.forEach((img) => formData.append('images', img));
 
   return formData;
 };
@@ -168,6 +170,8 @@ const CreateService = () => {
   });
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(isEdit);
+  const [images, setImages] = useState([]);
+  const [previews, setPreviews] = useState([]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -206,6 +210,28 @@ const CreateService = () => {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    if (files.length + images.length > 5) {
+      toast.error('Maximum 5 images allowed');
+      return;
+    }
+
+    setImages((prev) => [...prev, ...files]);
+    const nextPreviews = files.map((file) => URL.createObjectURL(file));
+    setPreviews((prev) => [...prev, ...nextPreviews]);
+  };
+
+  const removeImage = (index) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+    setPreviews((prev) => {
+      URL.revokeObjectURL(prev[index]);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.title.trim() || !form.description.trim()) {
@@ -215,7 +241,7 @@ const CreateService = () => {
 
     setLoading(true);
     try {
-      const formData = buildServiceFormData(form);
+      const formData = buildServiceFormData(form, images);
 
       if (isEdit) {
         await serviceAPI.update(id, formData);
@@ -249,6 +275,27 @@ const CreateService = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="form-card">
+        <div className="form-group">
+          <label className="form-label">Images (up to 5)</label>
+          <div className="image-upload-grid">
+            {previews.map((src, i) => (
+              <div key={i} className="image-upload-preview">
+                <img src={src} alt={`Preview ${i + 1}`} />
+                <button type="button" className="image-upload-remove" onClick={() => removeImage(i)}>
+                  <XIcon size={14} />
+                </button>
+              </div>
+            ))}
+            {previews.length < 5 && (
+              <label className="image-upload-btn">
+                <input type="file" accept="image/*" multiple onChange={handleImageChange} hidden />
+                <PlusIcon size={24} />
+                <span>Add Photo</span>
+              </label>
+            )}
+          </div>
+        </div>
+
         <div className="form-group">
           <label className="form-label" htmlFor="title">Title *</label>
           <input

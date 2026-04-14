@@ -94,6 +94,8 @@ const normalizeTags = (value) => {
 
 exports.createService = async (req, res, next) => {
   try {
+    console.log('FILES:', req.files);
+
     const normalizedAvailability = normalizeAvailability(req.body);
     const normalizedTags = normalizeTags(req.body.tags);
 
@@ -109,8 +111,7 @@ exports.createService = async (req, res, next) => {
 
     if (req.files && req.files.length > 0) {
       serviceData.images = req.files.map((file) => ({
-        url: `/uploads/${file.filename}`,
-        thumbnail: `/uploads/${file.filename}`,
+        url: file.path,
       }));
     }
 
@@ -210,8 +211,7 @@ exports.updateService = async (req, res, next) => {
 
     if (req.files && req.files.length > 0) {
       const newImages = req.files.map((file) => ({
-        url: `/uploads/${file.filename}`,
-        thumbnail: `/uploads/${file.filename}`,
+        url: file.path,
       }));
       updateData.images = [...(service.images || []), ...newImages];
     }

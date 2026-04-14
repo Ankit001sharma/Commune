@@ -58,7 +58,9 @@ app.use('/api/', limiter);
 
 // Static files
 const fs = require('fs');
-const uploadDir = path.join(__dirname, 'uploads');
+const uploadDir = path.isAbsolute(config.upload.path)
+  ? config.upload.path
+  : path.resolve(__dirname, config.upload.path);
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 app.use('/uploads', express.static(uploadDir));
 

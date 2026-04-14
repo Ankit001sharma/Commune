@@ -5,6 +5,8 @@ const QueryBuilder = require('../utils/QueryBuilder');
 
 exports.createListing = async (req, res, next) => {
   try {
+    console.log('FILES:', req.files);
+
     const listingData = {
       ...req.body,
       seller: req.user._id,
@@ -12,8 +14,7 @@ exports.createListing = async (req, res, next) => {
 
     if (req.files && req.files.length > 0) {
       listingData.images = req.files.map((file) => ({
-        url: `/uploads/${file.filename}`,
-        thumbnail: `/uploads/${file.filename}`,
+        url: file.path,
       }));
     }
 
@@ -88,8 +89,7 @@ exports.updateListing = async (req, res, next) => {
 
     if (req.files && req.files.length > 0) {
       const newImages = req.files.map((file) => ({
-        url: `/uploads/${file.filename}`,
-        thumbnail: `/uploads/${file.filename}`,
+        url: file.path,
       }));
       updateData.images = [...(listing.images || []), ...newImages];
     }

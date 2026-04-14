@@ -9,8 +9,7 @@ import {
 } from '../../components/Icons';
 import { toast } from '../../components/ui/Toast';
 import AppImage from "../../components/common/AppImage";
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+import { resolveImageUrl } from '../../utils/image';
 
 const ListingDetail = () => {
   const { id } = useParams();
@@ -126,7 +125,7 @@ const ListingDetail = () => {
             {images.length > 0 ? (
 
           <AppImage
-            src={`${API_URL}${images[selectedImage]?.url}`}
+            src={resolveImageUrl(images[selectedImage]?.url)}
             height={400}
           />
             ) : (
@@ -143,7 +142,7 @@ const ListingDetail = () => {
                   className={`detail-thumbnail ${selectedImage === i ? 'active' : ''}`}
                   onClick={() => setSelectedImage(i)}
                 >
-                  <img src={`${API_URL}${img.url}`} alt={`${listing.title} ${i + 1}`} />
+                  <img src={resolveImageUrl(img.url)} alt={`${listing.title} ${i + 1}`} />
                 </div>
               ))}
             </div>

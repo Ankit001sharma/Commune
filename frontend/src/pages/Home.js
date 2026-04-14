@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppImage from "../components/common/AppImage";
+import { resolveImageUrl } from "../utils/image";
 
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const Home = () => {
   const [listings, setListings] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/listings")
+    fetch(`${API_BASE}/listings`)
       .then(res => res.json())
       .then(data => setListings(data.data))
       .catch(err => console.error(err));
@@ -66,7 +68,7 @@ const Home = () => {
           >
             {/* Image */}
             <AppImage
-            src={`http://localhost:5000${item.images[0]?.url}`}
+            src={resolveImageUrl(item.images?.[0]?.url)}
             height={160}
             />
 

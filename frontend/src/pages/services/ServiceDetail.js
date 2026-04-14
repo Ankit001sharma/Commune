@@ -8,6 +8,8 @@ import {
   DollarIcon, HeartIcon, HeartFilledIcon,
 } from '../../components/Icons';
 import { toast } from '../../components/ui/Toast';
+import AppImage from '../../components/common/AppImage';
+import { resolveImageUrl } from '../../utils/image';
 
 const ServiceDetail = () => {
   const { id } = useParams();
@@ -158,6 +160,8 @@ const ServiceDetail = () => {
 
   if (!service) return null;
 
+  const serviceImageUrl = resolveImageUrl(service.images?.[0]?.url);
+
   return (
     <div className="page-container">
       <div className="breadcrumb">
@@ -172,6 +176,12 @@ const ServiceDetail = () => {
         {/* Main Content */}
         <div className="detail-gallery" style={{ padding: 0 }}>
           <div className="form-card" style={{ margin: 0 }}>
+            {serviceImageUrl && (
+              <div style={{ marginBottom: 16 }}>
+                <AppImage src={serviceImageUrl} alt={service.title} height={300} />
+              </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
               <div>
                 <span className="card-category">{service.category}</span>

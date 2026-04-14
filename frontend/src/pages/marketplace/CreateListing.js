@@ -4,6 +4,7 @@ import { listingAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { XIcon, PlusIcon } from '../../components/Icons';
 import { toast } from '../../components/ui/Toast';
+import { resolveImageUrl } from '../../utils/image';
 
 const CATEGORIES = [
   { value: 'books', label: 'Books' },
@@ -61,8 +62,7 @@ const CreateListing = () => {
             tags: l.tags?.join(', ') || '',
           });
           if (l.images?.length) {
-            const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-            setPreviews(l.images.map((img) => `${API_URL}${img.url}`));
+            setPreviews(l.images.map((img) => resolveImageUrl(img.url)));
           }
         } catch (err) {
           toast.error('Failed to load listing');

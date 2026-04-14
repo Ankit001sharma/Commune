@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { postAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { XIcon, PlusIcon } from '../../components/Icons';
 import { toast } from '../../components/ui/Toast';
 
 const POST_TYPES = [
@@ -26,6 +27,8 @@ const CreatePost = () => {
   });
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(isEdit);
+  const [images, setImages] = useState([]);
+  const [previews, setPreviews] = useState([]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -59,6 +62,28 @@ const CreatePost = () => {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    if (files.length + images.length > 3) {
+      toast.error('Maximum 3 images allowed');
+      return;
+    }
+
+    setImages((prev) => [...prev, ...files]);
+    const nextPreviews = files.map((file) => URL.createObjectURL(file));
+    setPreviews((prev) => [...prev, ...nextPreviews]);
+  };
+
+  const removeImage = (index) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+    setPreviews((prev) => {
+      URL.revokeObjectURL(prev[index]);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.title.trim() || !form.content.trim()) {
@@ -82,7 +107,16 @@ const CreatePost = () => {
         toast.success('Post updated');
         navigate(`/community/${id}`);
       } else {
-        const { data } = await postAPI.create(payload);
+        const formData = new FormData();
+        formData.append('title', payload.title);
+        formData.append('content', payload.content);
+        formData.append('type', payload.type);
+        if (payload.tags?.length) {
+          formData.append('tags', payload.tags.join(','));
+        }
+        images.forEach((img) => formData.append('images', img));
+
+        const { data } = await postAPI.create(formData);
         toast.success('Post created');
         navigate(`/community/${data.data._id}`);
       }
@@ -109,6 +143,29 @@ const CreatePost = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="form-card">
+        {!isEdit && (
+          <div className="form-group">
+            <label className="form-label">Images (up to 3)</label>
+            <div className="image-upload-grid">
+              {previews.map((src, i) => (
+                <div key={i} className="image-upload-preview">
+                  <img src={src} alt={`Preview ${i + 1}`} />
+                  <button type="button" className="image-upload-remove" onClick={() => removeImage(i)}>
+                    <XIcon size={14} />
+                  </button>
+                </div>
+              ))}
+              {previews.length < 3 && (
+                <label className="image-upload-btn">
+                  <input type="file" accept="image/*" multiple onChange={handleImageChange} hidden />
+                  <PlusIcon size={24} />
+                  <span>Add Photo</span>
+                </label>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="form-group">
           <label className="form-label" htmlFor="type">Post Type</label>
           <select id="type" name="type" className="form-select" value={form.type} onChange={handleChange}>

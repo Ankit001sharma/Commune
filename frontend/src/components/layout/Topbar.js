@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { SearchIcon, BellIcon, MenuIcon } from '../Icons';
 
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const Topbar = ({ onMenuToggle }) => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -16,9 +18,9 @@ const Topbar = ({ onMenuToggle }) => {
 
     const fetchNotifications = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/notifications", {
+        const res = await fetch(`${API_BASE}/notifications`, {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`
+            Authorization: `Bearer ${localStorage.getItem('cx_token')}`,
           }
         });
 
