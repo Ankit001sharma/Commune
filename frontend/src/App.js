@@ -7,6 +7,7 @@ import AIChatbot from './components/AIChatbot';
 // Auth Pages
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import VerifyOtp from './pages/auth/VerifyOtp';
 import Home from './pages/Home';
 
 // Marketplace Pages
@@ -85,6 +86,7 @@ const App = () => {
         {/* Public Auth routes (no layout) */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/verify-otp" element={<VerifyOtp />} />
 
         {/* Main App routes wrapped in ProtectedRoute. 
           If isAuthenticated is false, everything inside here redirects to /login.

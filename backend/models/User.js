@@ -83,7 +83,7 @@ const userSchema = new mongoose.Schema(
     year: {
       type: Number,
       min: 1,
-      max: 6,
+      max: 4,
       default: 1,
     },
     college: {
@@ -93,6 +93,24 @@ const userSchema = new mongoose.Schema(
     isVerified: {
       type: Boolean,
       default: false,
+    },
+    welcomeEmailSent: {
+      type: Boolean,
+      default: false,
+      set: (value) => Boolean(value),
+    },
+    otp: {
+      type: String,
+      select: false,
+    },
+    otpExpiry: {
+      type: Date,
+      select: false,
+    },
+    otpResendCount: {
+      type: Number,
+      default: 0,
+      select: false,
     },
     isAdmin: {
       type: Boolean,

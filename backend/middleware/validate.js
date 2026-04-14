@@ -9,14 +9,24 @@ const validate = (validations) => {
 };
 
 const validateRegister = (req, res, next) => {
-  const { firstName, lastName, email, rollNumber, password } = req.body;
+  const { firstName, lastName, email, rollNumber, password, department, phone, year } = req.body;
   const errors = [];
 
   if (!firstName || firstName.trim().length < 2) errors.push('First name must be at least 2 characters');
   if (!lastName || lastName.trim().length < 2) errors.push('Last name must be at least 2 characters');
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) errors.push('Valid email is required');
-  if (!rollNumber || rollNumber.trim().length < 3) errors.push('Valid roll number is required');
+  if (!rollNumber || !/^\d{2}[A-Za-z]{4}\d+$/.test(rollNumber.trim())) errors.push('Valid roll number is required');
+  if (!department || !department.trim()) errors.push('Department is required');
+  if (!phone || !`${phone}`.trim()) {
+    errors.push('Phone is required');
+  } else if (!/^[0-9]{10}$/.test(`${phone}`.trim())) {
+    errors.push('Phone number must be exactly 10 digits');
+  }
+  if (year !== undefined && ![1, 2, 3, 4].includes(Number(year))) {
+    errors.push('Year must be between 1 and 4');
+  }
   if (!password || password.length < 8) errors.push('Password must be at least 8 characters');
+  if (password && !/[^A-Za-z0-9]/.test(password)) errors.push('Password must include at least one special character');
 
   if (errors.length > 0) {
     return res.status(400).json({ status: 'fail', message: errors.join('. ') });

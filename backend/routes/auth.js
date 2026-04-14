@@ -1,13 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
+const { sendOtp, verifyOtp, resendOtp } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 const { validateRegister, validateLogin, validateObjectId } = require('../middleware/validate');
 const upload = require('../middleware/upload');
 
+console.log('Auth routes loaded');
+
 router.post('/register', validateRegister, authController.register);
 router.post('/login', validateLogin, authController.login);
 router.post('/refresh-token', authController.refreshToken);
+router.post('/send-otp', sendOtp);
+router.post('/verify-otp', verifyOtp);
+router.post('/resend-otp', resendOtp);
 
 // Protected routes
 router.get('/me', protect, authController.getMe);

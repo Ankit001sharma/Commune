@@ -71,6 +71,46 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const sendSignupOtp = async (signupData) => {
+    try {
+      setError(null);
+      const { data } = await authAPI.sendOtp(signupData);
+      return data.data;
+    } catch (err) {
+      const message = err.response?.data?.message || 'Failed to send OTP';
+      setError(message);
+      throw new Error(message);
+    }
+  };
+
+  const verifySignupOtp = async ({ email, otp }) => {
+    try {
+      setError(null);
+      const { data } = await authAPI.verifyOtp({ email, otp });
+      localStorage.setItem('cx_token', data.data.token);
+      localStorage.setItem('cx_refresh_token', data.data.refreshToken);
+      setUser(data.data.user);
+      socketService.connect(data.data.token);
+      return data.data.user;
+    } catch (err) {
+      const message = err.response?.data?.message || 'OTP verification failed';
+      setError(message);
+      throw new Error(message);
+    }
+  };
+
+  const resendSignupOtp = async (email) => {
+    try {
+      setError(null);
+      const { data } = await authAPI.resendOtp({ email });
+      return data.data;
+    } catch (err) {
+      const message = err.response?.data?.message || 'Failed to resend OTP';
+      setError(message);
+      throw new Error(message);
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('cx_token');
     localStorage.removeItem('cx_refresh_token');
@@ -143,6 +183,9 @@ export const AuthProvider = ({ children }) => {
     error,
     login,
     register,
+    sendSignupOtp,
+    verifySignupOtp,
+    resendSignupOtp,
     logout,
     updateProfile,
     toggleFavorite,
