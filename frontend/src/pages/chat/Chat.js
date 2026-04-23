@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { chatAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationContext';
 import socketService from '../../services/socket';
 import {
   SendIcon, SearchIcon, MessageCircleIcon, CheckIcon,
@@ -11,6 +12,10 @@ const Chat = () => {
   const { id: activeId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const {
+    markMessageNotificationsByTargetRead,
+    refreshUnreadMessages,
+  } = useNotifications();
 
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
@@ -25,6 +30,7 @@ const Chat = () => {
   const typingTimeoutRef = useRef(null);
   const shouldAutoScrollRef = useRef(true);
   const isFirstRenderRef = useRef(true);
+  const senderRouteAttemptRef = useRef(new Set());
 
   const isNearBottom = (el) => {
     if (!el) return true;
@@ -57,33 +63,89 @@ const Chat = () => {
     fetchConversations();
   }, []);
 
+  // If route is /chat/:senderId (from message notification), resolve it to a conversation route.
+  useEffect(() => {
+    if (!activeId || loading) return;
+    if (conversations.some((conv) => conv._id === activeId)) return;
+    if (senderRouteAttemptRef.current.has(activeId)) return;
+
+    senderRouteAttemptRef.current.add(activeId);
+
+    const resolveConversationFromSender = async () => {
+      try {
+        const { data } = await chatAPI.createConversation({ recipientId: activeId });
+        const conversationId = data?.data?._id;
+
+        if (conversationId && conversationId !== activeId) {
+          navigate(`/chat/${conversationId}`, { replace: true });
+        }
+      } catch (_) {
+        // Keep current route if recipient cannot be resolved.
+      }
+    };
+
+    resolveConversationFromSender();
+  }, [activeId, loading, conversations, navigate]);
+
   // Fetch active conversation
   useEffect(() => {
-    if (!activeId) {
+    if (!activeId || !conversations.length) {
       setActiveConversation(null);
       setMessages([]);
       return;
     }
+
+    // ✅ ADD THIS (IMPORTANT FIX)
+    const isValidConversation = conversations.some(
+      (conv) => conv._id === activeId
+    );
+
+    if (!isValidConversation) {
+      console.log("Waiting for conversations to update:", activeId);
+      return;
+    }
+
     const fetchConversation = async () => {
       try {
         const { data } = await chatAPI.getConversation(activeId);
+
         setActiveConversation(data.data);
         setMessages(data.data.messages || []);
+
+        // 👇 KEEP YOUR ORIGINAL LOGIC (IMPORTANT)
+        setConversations((prev) =>
+          prev.map((conv) =>
+            conv._id === activeId ? { ...conv, unreadCount: 0 } : conv
+          )
+        );
+
+        const otherParticipantIds = (data.data.participants || [])
+          .map((participant) =>
+            typeof participant === 'string' ? participant : participant._id
+          )
+          .filter((participantId) => participantId !== user?._id);
+
+        await Promise.all(
+          otherParticipantIds.map((participantId) =>
+            markMessageNotificationsByTargetRead(participantId)
+          )
+        );
+
+        await refreshUnreadMessages();
+
         shouldAutoScrollRef.current = true;
         isFirstRenderRef.current = true;
+
         socketService.joinConversation(activeId);
         socketService.markAsRead(activeId);
+
       } catch (err) {
         console.error('Failed to fetch conversation:', err);
       }
     };
+
     fetchConversation();
-
-    return () => {
-      if (activeId) socketService.leaveConversation(activeId);
-    };
-  }, [activeId]);
-
+  }, [activeId, conversations]);
   useEffect(() => {
     if (!messagesContainerRef.current || messages.length === 0) return;
     if (!shouldAutoScrollRef.current) return;
@@ -98,22 +160,43 @@ const Chat = () => {
   // Socket event listeners
   useEffect(() => {
     const handleNewMessage = (message) => {
-      if (message.conversation === activeId) {
-        setMessages((prev) => [...prev, message]);
+      const conversationId = message.conversationId || message.conversation;
+      const senderId = typeof message.sender === 'string' ? message.sender : message.sender?._id;
+      const isIncomingFromOther = senderId && senderId !== user?._id;
+
+      if (conversationId === activeId) {
+        setMessages((prev) => {
+          if (prev.some((entry) => entry._id === message._id)) return prev;
+          return [...prev, message];
+        });
         socketService.markAsRead(activeId);
       }
+
       // Update conversation list
-      setConversations((prev) =>
-        prev.map((conv) => {
-          if (conv._id === message.conversation) {
-            return { ...conv, lastMessage: message, updatedAt: new Date().toISOString() };
-          }
-          return conv;
-        }).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-      );
+      setConversations((prev) => {
+        const next = prev.map((conv) => {
+          if (conv._id !== conversationId) return conv;
+
+          return {
+            ...conv,
+            lastMessage: {
+              content: message.content,
+              sender: senderId,
+              createdAt: message.createdAt,
+            },
+            updatedAt: message.createdAt || new Date().toISOString(),
+            unreadCount:
+              conversationId === activeId || !isIncomingFromOther
+                ? 0
+                : (conv.unreadCount || 0) + 1,
+          };
+        });
+
+        return next.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      });
     };
 
-    const handleTyping = ({ conversationId, userId }) => {
+    const handleTypingStart = ({ conversationId, userId }) => {
       if (userId !== user?._id) {
         setTypingUsers((prev) => ({ ...prev, [conversationId]: true }));
         setTimeout(() => {
@@ -122,18 +205,18 @@ const Chat = () => {
       }
     };
 
-    const handleStopTyping = ({ conversationId }) => {
+    const handleTypingStop = ({ conversationId }) => {
       setTypingUsers((prev) => ({ ...prev, [conversationId]: false }));
     };
 
-    socketService.on('new-message', handleNewMessage);
-    socketService.on('typing', handleTyping);
-    socketService.on('stop-typing', handleStopTyping);
+    socketService.on('message:new', handleNewMessage);
+    socketService.on('typing:start', handleTypingStart);
+    socketService.on('typing:stop', handleTypingStop);
 
     return () => {
-      socketService.off('new-message', handleNewMessage);
-      socketService.off('typing', handleTyping);
-      socketService.off('stop-typing', handleStopTyping);
+      socketService.off('message:new', handleNewMessage);
+      socketService.off('typing:start', handleTypingStart);
+      socketService.off('typing:stop', handleTypingStop);
     };
   }, [activeId, user?._id]);
 
@@ -144,10 +227,27 @@ const Chat = () => {
     setSending(true);
     try {
       const { data } = await chatAPI.sendMessage(activeId, { content: newMessage.trim() });
-      // Socket will broadcast to other participants
-      socketService.sendMessage(activeId, data.data);
       shouldAutoScrollRef.current = true;
-      setMessages((prev) => [...prev, data.data]);
+      setMessages((prev) => {
+        if (prev.some((entry) => entry._id === data.data?._id)) return prev;
+        return [...prev, data.data];
+      });
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv._id === activeId
+            ? {
+              ...conv,
+              lastMessage: {
+                content: data.data?.content,
+                sender: user?._id,
+                createdAt: data.data?.createdAt,
+              },
+              updatedAt: data.data?.createdAt || new Date().toISOString(),
+              unreadCount: 0,
+            }
+            : conv
+        )
+      );
       setNewMessage('');
       socketService.stopTyping(activeId);
     } catch (err) {
@@ -237,12 +337,21 @@ const Chat = () => {
             filteredConversations.map((conv) => {
               const other = getOtherParticipant(conv);
               const isActive = conv._id === activeId;
+              const unreadCount = conv.unreadCount || 0;
+              const isUnread = unreadCount > 0 && !isActive;
               const lastMsg = conv.lastMessage;
               return (
                 <div
                   key={conv._id}
-                  className={`chat-item ${isActive ? 'active' : ''}`}
-                  onClick={() => navigate(`/chat/${conv._id}`)}
+                  className={`chat-item ${isActive ? 'active' : ''} ${isUnread ? 'unread' : ''}`}
+                  onClick={() => {
+                    setConversations((prev) =>
+                      prev.map((entry) =>
+                        entry._id === conv._id ? { ...entry, unreadCount: 0 } : entry
+                      )
+                    );
+                    navigate(`/chat/${conv._id}`);
+                  }}
                 >
                   <div className="chat-item-avatar">{getInitials(other)}</div>
                   <div className="chat-item-info">
@@ -258,8 +367,11 @@ const Chat = () => {
                       }
                     </div>
                   </div>
-                  <div className="chat-item-time">
-                    {timeAgo(conv.updatedAt || conv.createdAt)}
+                  <div className="chat-item-meta">
+                    <div className="chat-item-time">
+                      {timeAgo(conv.updatedAt || conv.createdAt)}
+                    </div>
+                    {isUnread && <span className="chat-unread-badge">{unreadCount}</span>}
                   </div>
                 </div>
               );

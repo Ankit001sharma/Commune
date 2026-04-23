@@ -98,6 +98,7 @@ const App = () => {
           {/* Marketplace */}
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/marketplace/:id" element={<ListingDetail />} />
+          <Route path="/marketplace/item/:id" element={<ListingDetail />} />
           <Route path="/marketplace/create" element={<CreateListing />} />
           <Route path="/marketplace/edit/:id" element={<CreateListing />} />
 
@@ -110,6 +111,7 @@ const App = () => {
           {/* Community */}
           <Route path="/community" element={<Community />} />
           <Route path="/community/:id" element={<PostDetail />} />
+          <Route path="/community/post/:id" element={<PostDetail />} />
           <Route path="/community/create" element={<CreatePost />} />
           <Route path="/community/edit/:id" element={<CreatePost />} />
 

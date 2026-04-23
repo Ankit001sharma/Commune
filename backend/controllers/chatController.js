@@ -2,6 +2,7 @@ const Conversation = require('../models/Conversation');
 const AppError = require('../utils/AppError');
 const { sendResponse } = require('../utils/response');
 const Notification = require('../models/Notification');
+const { emitNotificationToUser, emitToConversation } = require('../services/socketService');
 
 // 🔹 GET ALL CONVERSATIONS
 exports.getConversations = async (req, res, next) => {
@@ -15,7 +16,22 @@ exports.getConversations = async (req, res, next) => {
       .populate('relatedService', 'title pricing')
       .sort('-updatedAt');
 
-    sendResponse(res, 200, conversations);
+    const enriched = conversations.map((conversation) => {
+      const unreadCount = (conversation.messages || []).reduce((count, msg) => {
+        if (msg.sender.toString() === req.user._id.toString()) return count;
+
+        const isRead = msg.readBy.some(
+          (r) => r.user.toString() === req.user._id.toString()
+        );
+
+        return isRead ? count : count + 1;
+      }, 0);
+
+      const base = conversation.toObject();
+      return { ...base, unreadCount };
+    });
+
+    sendResponse(res, 200, enriched);
   } catch (error) {
     next(error);
   }
@@ -50,6 +66,17 @@ exports.getConversation = async (req, res, next) => {
     });
 
     await conversation.save();
+
+    await Notification.updateMany(
+      {
+        user: req.user._id,
+        type: 'message',
+        conversationId: conversation._id,
+        isRead: false,
+      },
+      { isRead: true }
+    );
+
     sendResponse(res, 200, conversation);
 
   } catch (error) {
@@ -139,17 +166,44 @@ exports.sendMessage = async (req, res, next) => {
       (p) => p.toString() !== req.user._id.toString()
     );
 
-    for (let userId of recipients) {
-      await Notification.create({
+    const senderName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'Someone';
+
+    for (const userId of recipients) {
+      const notification = await Notification.create({
         user: userId,
-        type: "message",
-        text: `${req.user.firstName} sent you a message`,
-        conversationId: conversation._id,
+        type: 'message',
         sender: req.user._id,
+        senderName,
+        targetId: req.user._id.toString(),
+        text: `User ${senderName} sent you a message`,
+        conversationId: conversation._id,
+        metadata: {
+          senderId: req.user._id.toString(),
+          messagePreview: content.trim().slice(0, 120),
+        },
       });
+
+      emitNotificationToUser(userId.toString(), notification);
     }
 
     const newMessage = conversation.messages[conversation.messages.length - 1];
+
+    const messageData = {
+      _id: newMessage._id,
+      sender: {
+        _id: req.user._id,
+        firstName: req.user.firstName,
+        lastName: req.user.lastName,
+        avatar: req.user.avatar,
+      },
+      content: newMessage.content,
+      messageType: newMessage.messageType,
+      metadata: newMessage.metadata,
+      createdAt: newMessage.createdAt,
+      conversationId: conversation._id.toString(),
+    };
+
+    emitToConversation(conversation._id.toString(), 'message:new', messageData);
 
     sendResponse(res, 201, newMessage, 'Message sent');
 

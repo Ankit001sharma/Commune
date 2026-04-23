@@ -1,43 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationContext';
 import { SearchIcon, BellIcon, MenuIcon } from '../Icons';
-
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const Topbar = ({ onMenuToggle }) => {
   const { user, isAuthenticated } = useAuth();
+  const { unreadNotificationCount } = useNotifications();
   const navigate = useNavigate();
 
+  console.log('Topbar rendering with count:', unreadNotificationCount);
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [notificationCount, setNotificationCount] = useState(0);
-
-  // 🔥 FETCH NOTIFICATIONS COUNT
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const fetchNotifications = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/notifications`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('cx_token')}`,
-          }
-        });
-
-        const data = await res.json();
-
-        if (data?.data) {
-          // only unread count
-          const unread = data.data.filter(n => !n.isRead).length;
-          setNotificationCount(unread);
-        }
-      } catch (err) {
-        console.error("Notification fetch error:", err);
-      }
-    };
-
-    fetchNotifications();
-  }, [isAuthenticated]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -86,9 +60,9 @@ const Topbar = ({ onMenuToggle }) => {
             >
               <BellIcon size={20} />
 
-              {notificationCount > 0 && (
+              {unreadNotificationCount > 0 && (
                 <span className="topbar-badge">
-                  {notificationCount}
+                  {unreadNotificationCount}
                 </span>
               )}
             </button>

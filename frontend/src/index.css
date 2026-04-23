@@ -841,6 +841,55 @@ ul, ol { list-style: none; }
 
 @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
+/* ===== Notifications ===== */
+.notification-item {
+  width: 100%;
+  text-align: left;
+  background: var(--cx-bg-card);
+  border: 1px solid var(--cx-border);
+  border-radius: var(--cx-radius);
+  padding: 12px;
+  margin-top: 10px;
+  transition: var(--cx-transition);
+}
+
+.notification-item:hover {
+  border-color: var(--cx-primary);
+  background: var(--cx-bg);
+}
+
+.notification-item.unread {
+  background: rgba(108, 99, 255, 0.08);
+  border-color: rgba(108, 99, 255, 0.22);
+}
+
+.notification-item.compact {
+  margin-top: 8px;
+  padding: 10px;
+}
+
+.notification-item-text {
+  font-size: 0.85rem;
+  color: var(--cx-text);
+  line-height: 1.45;
+}
+
+.notification-item-meta {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--cx-text-muted);
+}
+
+.notification-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cx-danger);
+}
+
 /* ===== Chat ===== */
 .chat-layout {
   display: grid;
@@ -867,6 +916,20 @@ ul, ol { list-style: none; }
 
 .chat-list { flex: 1; overflow-y: auto; }
 
+.chat-alerts {
+  padding: 0 12px 12px;
+  border-bottom: 1px solid var(--cx-border-light);
+}
+
+.chat-alerts-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 700;
+  color: var(--cx-text-muted);
+  padding: 0 2px;
+}
+
 .chat-item {
   display: flex;
   align-items: center;
@@ -879,6 +942,14 @@ ul, ol { list-style: none; }
 
 .chat-item:hover { background: var(--cx-bg); }
 .chat-item.active { background: var(--cx-primary-bg); }
+.chat-item.unread {
+  background: rgba(59, 130, 246, 0.1);
+  border-left: 3px solid var(--cx-secondary);
+}
+.chat-item.unread .chat-item-name,
+.chat-item.unread .chat-item-last {
+  font-weight: 700;
+}
 
 .chat-item-avatar {
   width: 44px;
@@ -908,6 +979,27 @@ ul, ol { list-style: none; }
   font-size: 0.72rem;
   color: var(--cx-text-muted);
   flex-shrink: 0;
+}
+
+.chat-item-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.chat-unread-badge {
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--cx-danger);
+  color: #fff;
+  padding: 0 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .chat-main { display: flex; flex-direction: column; }

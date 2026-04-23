@@ -2,8 +2,10 @@ const Listing = require('../models/Listing');
 const Post = require('../models/Post');
 const Service = require('../models/Service');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const AppError = require('../utils/AppError');
 const { sendResponse } = require('../utils/response');
+const { emitNotificationToUser } = require('../services/socketService');
 
 const ITEM_TYPE_TO_MODEL = {
   listing: 'Listing',
@@ -106,6 +108,32 @@ exports.saveItem = async (req, res, next) => {
     }
 
     await user.save({ validateBeforeSave: false });
+
+    if (saved) {
+      const ownerField = ITEM_TYPE_TO_OWNER_FIELD[itemType];
+      const ownerId = item[ownerField]?.toString();
+
+      if (ownerId && ownerId !== req.user._id.toString()) {
+        const senderName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'Someone';
+        const itemName = `${item.title || itemType}`;
+
+        const notification = await Notification.create({
+          user: ownerId,
+          type: 'item_save',
+          sender: req.user._id,
+          senderName,
+          targetId: item._id.toString(),
+          text: `User ${senderName} saved your item ${itemName}`,
+          metadata: {
+            itemType,
+            itemId: item._id.toString(),
+            itemName,
+          },
+        });
+
+        emitNotificationToUser(ownerId, notification);
+      }
+    }
 
     console.log('[SaveItem] Updated', {
       userId: req.user?._id?.toString(),

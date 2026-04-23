@@ -30,6 +30,13 @@ class SocketService {
     this.socket.on('connect_error', (error) => {
       console.error('[Socket] Error:', error.message);
     });
+
+    // Re-bind persisted listeners for the current socket instance.
+    this.listeners.forEach((callbacks, event) => {
+      callbacks.forEach((callback) => {
+        this.socket.on(event, callback);
+      });
+    });
   }
 
   disconnect() {
@@ -46,14 +53,41 @@ class SocketService {
   }
 
   on(event, callback) {
+    if (!event || typeof callback !== 'function') return;
+
+    const callbacks = this.listeners.get(event) || new Set();
+    callbacks.add(callback);
+    this.listeners.set(event, callbacks);
+
     if (this.socket) {
       this.socket.on(event, callback);
     }
   }
 
   off(event, callback) {
+    if (!event) return;
+
+    const callbacks = this.listeners.get(event);
+    if (callbacks) {
+      if (callback) {
+        callbacks.delete(callback);
+      } else {
+        callbacks.clear();
+      }
+
+      if (callbacks.size === 0) {
+        this.listeners.delete(event);
+      } else {
+        this.listeners.set(event, callbacks);
+      }
+    }
+
     if (this.socket) {
-      this.socket.off(event, callback);
+      if (callback) {
+        this.socket.off(event, callback);
+      } else {
+        this.socket.off(event);
+      }
     }
   }
 

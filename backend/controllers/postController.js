@@ -1,7 +1,9 @@
 const Post = require('../models/Post');
+const Notification = require('../models/Notification');
 const AppError = require('../utils/AppError');
 const { sendResponse, sendPaginatedResponse } = require('../utils/response');
 const QueryBuilder = require('../utils/QueryBuilder');
+const { emitNotificationToUser } = require('../services/socketService');
 
 exports.createPost = async (req, res, next) => {
   try {
@@ -136,6 +138,26 @@ exports.addComment = async (req, res, next) => {
     });
 
     await post.save();
+
+    if (post.author.toString() !== req.user._id.toString()) {
+      const senderName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'Someone';
+      const notification = await Notification.create({
+        user: post.author,
+        type: 'community_interaction',
+        sender: req.user._id,
+        senderName,
+        targetId: post._id.toString(),
+        text: `User ${senderName} commented on your post`,
+        metadata: {
+          action: 'commented',
+          postId: post._id.toString(),
+          postTitle: post.title,
+        },
+      });
+
+      emitNotificationToUser(post.author.toString(), notification);
+    }
+
     await post.populate('comments.author', 'firstName lastName avatar');
 
     sendResponse(res, 201, post, 'Comment added successfully');
@@ -157,6 +179,25 @@ exports.toggleLike = async (req, res, next) => {
     }
 
     await post.save({ validateBeforeSave: false });
+
+    if (index === -1 && post.author.toString() !== req.user._id.toString()) {
+      const senderName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'Someone';
+      const notification = await Notification.create({
+        user: post.author,
+        type: 'community_interaction',
+        sender: req.user._id,
+        senderName,
+        targetId: post._id.toString(),
+        text: `User ${senderName} liked your post`,
+        metadata: {
+          action: 'liked',
+          postId: post._id.toString(),
+          postTitle: post.title,
+        },
+      });
+
+      emitNotificationToUser(post.author.toString(), notification);
+    }
 
     sendResponse(res, 200, { likes: post.likes.length, liked: index === -1 }, 'Like toggled');
   } catch (error) {

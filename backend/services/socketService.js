@@ -2,10 +2,40 @@ const jwt = require('jsonwebtoken');
 const config = require('../config');
 const User = require('../models/User');
 const Conversation = require('../models/Conversation');
+const Notification = require('../models/Notification');
 
 const onlineUsers = new Map();
+let ioInstance = null;
+
+const emitToConversation = (conversationId, event, payload) => {
+  if (!ioInstance || !conversationId) return;
+  ioInstance.to(`conversation:${conversationId}`).emit(event, payload);
+};
+
+const emitNotificationToUser = (userId, notificationPayload) => {
+  if (!ioInstance || !userId) return;
+  const socketId = onlineUsers.get(String(userId));
+
+  const payload = notificationPayload?.toObject
+    ? notificationPayload.toObject()
+    : notificationPayload;
+
+  // Preferred event for new clients.
+  ioInstance.to(String(userId)).emit('new_notification', payload);
+
+  // Backward-compatible event name.
+  ioInstance.to(String(userId)).emit('notification:new', payload);
+
+  // Direct emit to known socket as a fallback if room membership is absent.
+  if (!socketId) return;
+
+  ioInstance.to(socketId).emit('new_notification', payload);
+  ioInstance.to(socketId).emit('notification:new', payload);
+};
 
 const initializeSocket = (io) => {
+  ioInstance = io;
+
   // Authentication middleware
   io.use(async (socket, next) => {
     try {
@@ -26,6 +56,7 @@ const initializeSocket = (io) => {
   io.on('connection', (socket) => {
     const userId = socket.user._id.toString();
     onlineUsers.set(userId, socket.id);
+    socket.join(userId);
 
     console.log(`[Socket] User connected: ${socket.user.fullName} (${userId})`);
 
@@ -88,18 +119,39 @@ const initializeSocket = (io) => {
         };
 
         // Emit to conversation room
-        io.to(`conversation:${conversationId}`).emit('message:new', messageData);
+        emitToConversation(conversationId, 'message:new', messageData);
 
-        // Notify other participant if not in the room
-        conversation.participants.forEach((participantId) => {
+        // Persist and emit real-time notifications for other participants.
+        for (const participantId of conversation.participants) {
           const pid = participantId.toString();
-          if (pid !== userId && onlineUsers.has(pid)) {
-            io.to(onlineUsers.get(pid)).emit('message:notification', {
+          if (pid !== userId) {
+            const senderName = `${socket.user.firstName || ''} ${socket.user.lastName || ''}`.trim() || 'Someone';
+
+            const notification = await Notification.create({
+              user: participantId,
+              type: 'message',
+              sender: socket.user._id,
+              senderName,
+              targetId: userId,
+              text: `User ${senderName} sent you a message`,
               conversationId,
-              message: messageData,
+              metadata: {
+                senderId: userId,
+                messagePreview: content.slice(0, 120),
+              },
             });
+
+            emitNotificationToUser(pid, notification);
+
+            // Keep legacy event for compatibility with older clients.
+            if (onlineUsers.has(pid)) {
+              io.to(onlineUsers.get(pid)).emit('message:notification', {
+                conversationId,
+                message: messageData,
+              });
+            }
           }
-        });
+        }
       } catch (error) {
         socket.emit('error', { message: 'Failed to send message' });
       }
@@ -163,4 +215,9 @@ const initializeSocket = (io) => {
   return io;
 };
 
-module.exports = { initializeSocket, onlineUsers };
+module.exports = {
+  initializeSocket,
+  onlineUsers,
+  emitNotificationToUser,
+  emitToConversation,
+};
