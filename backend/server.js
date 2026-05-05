@@ -22,6 +22,8 @@ const transactionRoutes = require('./routes/transactions');
 const aiRoutes = require('./routes/ai');
 const userRoutes = require('./routes/users');
 const notificationRoutes = require('./routes/notificationRoutes');
+const tokenRoutes = require('./routes/tokens');
+const adminRoutes = require('./routes/admin');
 const { protect } = require('./middleware/auth');
 const aiController = require('./controllers/aiController');
 
@@ -73,6 +75,8 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/tokens', tokenRoutes);
+app.use('/api/admin', adminRoutes);
 app.get('/api/recommendations', protect, aiController.getRecommendations);
 app.use('/api/notifications', notificationRoutes);
 

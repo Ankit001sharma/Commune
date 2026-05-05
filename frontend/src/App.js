@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import AppLayout from './components/layout/AppLayout';
 import AIChatbot from './components/AIChatbot';
+import SplashScreen from './components/common/SplashScreen';
 
 // Auth Pages
 import Login from './pages/auth/Login';
@@ -39,6 +40,7 @@ import AISearch from './pages/ai/AISearch';
 import Notifications from './pages/notifications/Notifications';
 import SavedItems from './pages/saved/SavedItems';
 import Activity from './pages/activity/Activity';
+import Admin from './pages/admin/Admin';
 
 // Protected Route wrapper
 const ProtectedRoute = ({ children }) => {
@@ -131,6 +133,7 @@ const App = () => {
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/saved-items" element={<SavedItems />} />
           <Route path="/activity" element={<Activity />} />
+          <Route path="/admin" element={<Admin />} />
         </Route>
 
         {/* Global Catch-all redirect */}
@@ -143,4 +146,10 @@ const App = () => {
   );
 };
 
-export default App;
+const AppWithSplash = () => (
+  <SplashScreen>
+    <App />
+  </SplashScreen>
+);
+
+export default AppWithSplash;

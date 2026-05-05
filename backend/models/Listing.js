@@ -25,6 +25,7 @@ const listingSchema = new mongoose.Schema(
         'stationery',
         'sports',
         'vehicles',
+        'food',
         'accessories',
         'other',
       ],
@@ -63,8 +64,13 @@ const listingSchema = new mongoose.Schema(
       index: true,
     },
     location: {
-      type: String,
-      default: 'Campus',
+      address: { type: String, default: 'Campus' },
+      mode: { type: String, enum: ['manual', 'live'], default: 'manual' },
+      coordinates: {
+        lat: { type: Number, default: null },
+        lng: { type: Number, default: null },
+      },
+      updatedAt: { type: Date, default: null },
     },
     tags: [{ type: String, lowercase: true, trim: true }],
     views: {

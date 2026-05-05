@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
   HomeIcon, ShoppingBagIcon, BriefcaseIcon, UsersIcon,
   MessageCircleIcon, CreditCardIcon, DashboardIcon,
-  LogOutIcon, ZapIcon, HeartIcon
+  LogOutIcon, ZapIcon, HeartIcon, SettingsIcon
 } from '../Icons';
 
 const navItems = [
@@ -18,11 +18,12 @@ const navItems = [
   { to: '/transactions', icon: CreditCardIcon, label: 'Transactions' },
   { to: '/saved-items', icon: HeartIcon, label: 'Saved Items' },
   { to: '/dashboard', icon: DashboardIcon, label: 'Dashboard' },
+  { to: '/admin', icon: SettingsIcon, label: 'Admin', adminOnly: true },
   { label: 'AI', type: 'section' },
   { to: '/ai-search', icon: ZapIcon, label: 'Smart Search' },
 ];
 
-const Sidebar = ({ isOpen, onClose }) => {
+const Sidebar = ({ isOpen, collapsed, onClose }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
 
@@ -37,19 +38,9 @@ const Sidebar = ({ isOpen, onClose }) => {
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 150,
         display: window.innerWidth <= 768 ? 'block' : 'none'
       }} />}
-      <aside className={`app-sidebar ${isOpen ? 'open' : ''}`}>
+      <aside className={`app-sidebar ${isOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-logo">
-          <svg width="36" height="36" viewBox="0 0 64 64" fill="none">
-            <defs>
-              <linearGradient id="logo-g" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#6C63FF"/>
-                <stop offset="100%" stopColor="#3B82F6"/>
-              </linearGradient>
-            </defs>
-            <rect width="64" height="64" rx="14" fill="url(#logo-g)"/>
-            <text x="32" y="44" textAnchor="middle" fill="white" fontFamily="Inter,sans-serif" fontWeight="800" fontSize="32">CX</text>
-          </svg>
-          <span className="sidebar-logo-text">CommuneX</span>
+          <img src="/logo.jpeg" alt="CommuneX" className="sidebar-logo-img" />
         </div>
 
         <nav className="sidebar-nav">
@@ -57,6 +48,7 @@ const Sidebar = ({ isOpen, onClose }) => {
             if (item.type === 'section') {
               return <div key={i} className="sidebar-section-title">{item.label}</div>;
             }
+            if (item.adminOnly && !user?.isAdmin) return null;
             const IconComp = item.icon;
             return (
               <NavLink
@@ -69,7 +61,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                 onClick={onClose}
               >
                 <IconComp size={20} />
-                {item.label}
+                <span className="sidebar-link-label">{item.label}</span>
               </NavLink>
             );
           })}
@@ -82,7 +74,7 @@ const Sidebar = ({ isOpen, onClose }) => {
               <div className="sidebar-user-name">{user.firstName} {user.lastName}</div>
               <div className="sidebar-user-role">{user.department || 'Student'}</div>
             </div>
-            <button onClick={logout} style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.5)' }} title="Logout">
+            <button className="sidebar-logout" onClick={logout} style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.5)' }} title="Logout">
               <LogOutIcon size={18} />
             </button>
           </div>

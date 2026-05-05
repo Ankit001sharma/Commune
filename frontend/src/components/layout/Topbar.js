@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
-import { SearchIcon, BellIcon, MenuIcon } from '../Icons';
+import { SearchIcon, BellIcon, MenuIcon, ChevronLeftIcon } from '../Icons';
 
-const Topbar = ({ onMenuToggle }) => {
+const Topbar = ({ onMenuToggle, onSidebarCollapseToggle }) => {
   const { user, isAuthenticated } = useAuth();
   const { unreadNotificationCount } = useNotifications();
   const navigate = useNavigate();
@@ -26,6 +26,9 @@ const Topbar = ({ onMenuToggle }) => {
       <div className="topbar-left">
         <button className="menu-toggle" onClick={onMenuToggle}>
           <MenuIcon size={22} />
+        </button>
+        <button className="sidebar-desktop-toggle" onClick={onSidebarCollapseToggle} title="Open or close sidebar">
+          <ChevronLeftIcon size={18} />
         </button>
 
         <form className="topbar-search" onSubmit={handleSearch}>

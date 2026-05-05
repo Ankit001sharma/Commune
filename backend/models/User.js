@@ -131,6 +131,16 @@ const userSchema = new mongoose.Schema(
       balance: { type: Number, default: 0, min: 0 },
       escrowHeld: { type: Number, default: 0, min: 0 },
     },
+    tokens: {
+      balance: { type: Number, default: 0, min: 0 },
+      freeUploadsUsed: { type: Number, default: 0, min: 0 },
+      totalPurchased: { type: Number, default: 0, min: 0 },
+    },
+    recommendationProfile: {
+      searches: [{ type: String, lowercase: true, trim: true }],
+      viewedCategories: [{ type: String, lowercase: true, trim: true }],
+      lastRecommendationEmailAt: { type: Date, default: null },
+    },
     lastActive: {
       type: Date,
       default: Date.now,

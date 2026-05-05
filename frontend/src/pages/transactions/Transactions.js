@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { transactionAPI } from '../../services/api';
+import { tokenAPI, transactionAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import {
   CreditCardIcon, CheckIcon, XIcon,
@@ -27,12 +27,17 @@ const Transactions = () => {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [pricing, setPricing] = useState(null);
 
   useEffect(() => {
     const fetchTransactions = async () => {
       try {
-        const { data } = await transactionAPI.getAll();
+        const [{ data }, pricingRes] = await Promise.all([
+          transactionAPI.getAll(),
+          tokenAPI.getPricing().catch(() => ({ data: null })),
+        ]);
         setTransactions(data.data || []);
+        setPricing(pricingRes.data?.data || null);
       } catch (err) {
         console.error('Failed to fetch transactions:', err);
       } finally {
@@ -52,6 +57,16 @@ const Transactions = () => {
     return isBuyer ? tx.seller : tx.buyer;
   };
 
+  const buyPlan = async (planName) => {
+    try {
+      const { data } = await tokenAPI.purchase(planName);
+      setPricing((prev) => ({ ...prev, tokens: data.data.tokens }));
+      toast.success(`${data.data.plan.name} tokens added`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to buy plan');
+    }
+  };
+
   if (loading) {
     return (
       <div className="loading-container">
@@ -69,6 +84,28 @@ const Transactions = () => {
           <p className="page-subtitle">{transactions.length} total transactions</p>
         </div>
       </div>
+
+      {pricing && (
+        <div className="pricing-panel">
+          <div>
+            <h2>Upload Tokens</h2>
+            <p>1 product = INR 5. You get 2 free uploads, then tokens power marketplace actions.</p>
+            <div className="token-meter">
+              <span>Free uploads used: {pricing.tokens?.freeUploadsUsed || 0}/2</span>
+              <strong>{pricing.tokens?.balance || 0} tokens left</strong>
+            </div>
+          </div>
+          <div className="pricing-grid">
+            {pricing.plans.map((plan) => (
+              <button key={plan.name} className={`pricing-plan ${plan.name === 'Popular' ? 'featured' : ''}`} onClick={() => buyPlan(plan.name)}>
+                <span>{plan.name}</span>
+                <strong>INR {plan.price}</strong>
+                <small>{plan.uploads} uploads</small>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Filter Tabs */}
       <div className="tabs" style={{ marginBottom: 24 }}>

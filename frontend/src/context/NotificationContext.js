@@ -4,9 +4,8 @@ import socketService from '../services/socket';
 import notificationService from '../services/notificationService';
 
 const NotificationContext = createContext(null);
-const COUNTABLE_TYPES = new Set(['item_save', 'community_interaction']);
 
-const countUnreadNonMessage = (items = []) =>
+const countUnread = (items = []) =>
   items.filter((item) => !item?.isRead).length;
 
 const upsertAtTop = (list, item) => {
@@ -24,28 +23,9 @@ export const NotificationProvider = ({ children }) => {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  const refreshUnreadMessages = useCallback(async () => {
-    if (!isAuthenticated || !userId) {
-      setUnreadMessages(0);
-      return;
-    }
-
-    try {
-      const unreadCount = await notificationService.getUnreadMessagesCount(userId);
-      setUnreadMessages(unreadCount);
-    } catch (_) {
-      // Keep last known value when refresh fails.
-    }
-  }, [isAuthenticated, userId]);
-
+  // ✅ SINGLE API CALL (no spam)
   const refreshNotifications = useCallback(async () => {
-    if (!isAuthenticated || !userId) {
-      setNotifications([]);
-      setMessageNotifications([]);
-      setUnreadNotificationCount(0);
-      setUnreadMessages(0);
-      return;
-    }
+    if (!isAuthenticated || !userId) return;
 
     setLoading(true);
 
@@ -58,125 +38,50 @@ export const NotificationProvider = ({ children }) => {
 
       setNotifications(allNotifications);
       setMessageNotifications(messageList);
-      setUnreadNotificationCount(countUnreadNonMessage(allNotifications));
+      setUnreadNotificationCount(countUnread(allNotifications));
       setUnreadMessages(unreadCount);
+    } catch (err) {
+      console.error("Notification fetch error:", err);
     } finally {
       setLoading(false);
     }
   }, [isAuthenticated, userId]);
 
-  const markNotificationAsRead = useCallback(async (notificationId) => {
-    if (!notificationId || !userId) return;
-
-    setNotifications((prev) => {
-      const next = prev.map((item) =>
-        item._id === notificationId ? { ...item, isRead: true } : item
-      );
-      setUnreadNotificationCount(countUnreadNonMessage(next));
-      return next;
-    });
-
-    try {
-      await notificationService.markAsRead(notificationId, userId);
-    } catch (_) {
-      // Keep optimistic UI state to avoid lingering highlight.
-    }
-  }, [userId]);
-
-  const markAllNonMessageAsRead = useCallback(async () => {
-    if (!userId) return;
-
-    setNotifications((prev) =>
-      prev.map((item) =>
-        item.type === 'message' ? item : { ...item, isRead: true }
-      )
-    );
-    setUnreadNotificationCount(0);
-
-    try {
-      await notificationService.markAllAsRead('non-message', userId);
-    } catch (_) {
-      // Keep optimistic UI state and avoid runtime crashes.
-    }
-  }, [userId]);
-
-  const markMessageNotificationsByTargetRead = useCallback(async (targetId) => {
-    if (!targetId || !userId) return;
-
-    setNotifications((prev) =>
-      prev.map((item) =>
-        item.type === 'message' && `${item.targetId}` === `${targetId}`
-          ? { ...item, isRead: true }
-          : item
-      )
-    );
-
-    try {
-      await notificationService.markMessageNotificationsByTargetRead(targetId, userId);
-    } catch (_) {
-      return;
-    }
-
-    setMessageNotifications((prev) =>
-      prev.filter((item) => item.targetId !== `${targetId}`)
-    );
-
-    await refreshUnreadMessages();
-  }, [refreshUnreadMessages, userId]);
-
+  // ✅ RUN ONLY ON LOGIN / USER LOAD
   useEffect(() => {
     if (isAuthenticated && userId) {
       refreshNotifications();
     }
   }, [isAuthenticated, userId]);
 
-  useEffect(() => {
-    if (!userId) return;
+  // ❌ REMOVED: duplicate refresh useEffect
+  // ❌ REMOVED: FORCE REFRESH
+  // ❌ REMOVED: interval spam
 
-    console.log("FORCE REFRESH TRIGGER");
-
-    refreshNotifications();
-  }, [userId]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const interval = setInterval(() => {
-      refreshUnreadMessages();
-    }, 20000);
-
-    return () => clearInterval(interval);
-  }, [isAuthenticated, refreshUnreadMessages]);
-
-  // Dedicated realtime notification effect.
+  // ✅ SOCKET (NO API CALL HERE)
   useEffect(() => {
     if (!isAuthenticated) return;
 
     const handleRealtimeNotification = (data) => {
       console.log('Socket received new notification:', data);
 
-      const incoming = data;
-      if (!incoming?._id) return;
+      if (!data?._id) return;
 
-      setNotifications((prevNotifications) => {
-        const alreadyExists = prevNotifications.some(
-          (entry) => entry?._id === incoming._id
-        );
+      setNotifications((prev) => {
+        const exists = prev.some((item) => item._id === data._id);
 
-        if (!alreadyExists ) {
+        if (!exists && !data.isRead) {
           setUnreadNotificationCount((prevCount) => prevCount + 1);
         }
 
-        return upsertAtTop(prevNotifications, incoming);
+        return upsertAtTop(prev, data);
       });
 
-      if (incoming.type === 'message') {
-        setMessageNotifications((prevNotifications) =>
-          upsertAtTop(prevNotifications, incoming)
-        );
+      if (data.type === 'message') {
+        setMessageNotifications((prev) => upsertAtTop(prev, data));
 
-        if (!incoming.isRead) {
-          setUnreadMessages((prevCount) => prevCount + 1);
+        if (!data.isRead) {
+          setUnreadMessages((prev) => prev + 1);
         }
       }
     };
@@ -188,6 +93,22 @@ export const NotificationProvider = ({ children }) => {
     };
   }, [isAuthenticated]);
 
+  const markNotificationAsRead = useCallback(async (notificationId) => {
+    if (!notificationId) return;
+
+    setNotifications((prev) => {
+      const updated = prev.map((n) =>
+        n._id === notificationId ? { ...n, isRead: true } : n
+      );
+      setUnreadNotificationCount(countUnread(updated));
+      return updated;
+    });
+
+    try {
+      await notificationService.markAsRead(notificationId);
+    } catch {}
+  }, []);
+
   const value = useMemo(
     () => ({
       notifications,
@@ -196,10 +117,7 @@ export const NotificationProvider = ({ children }) => {
       unreadMessages,
       loading,
       refreshNotifications,
-      refreshUnreadMessages,
       markNotificationAsRead,
-      markAllNonMessageAsRead,
-      markMessageNotificationsByTargetRead,
     }),
     [
       notifications,
@@ -208,10 +126,7 @@ export const NotificationProvider = ({ children }) => {
       unreadMessages,
       loading,
       refreshNotifications,
-      refreshUnreadMessages,
       markNotificationAsRead,
-      markAllNonMessageAsRead,
-      markMessageNotificationsByTargetRead,
     ]
   );
 

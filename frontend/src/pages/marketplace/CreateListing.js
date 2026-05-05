@@ -5,6 +5,8 @@ import { useAuth } from '../../context/AuthContext';
 import { XIcon, PlusIcon } from '../../components/Icons';
 import { toast } from '../../components/ui/Toast';
 import { resolveImageUrl } from '../../utils/image';
+import LocationPicker from '../../components/location/LocationPicker';
+import BackButton from '../../components/common/BackButton';
 
 const CATEGORIES = [
   { value: 'books', label: 'Books' },
@@ -34,6 +36,7 @@ const CreateListing = () => {
     negotiable: false,
     condition: 'good',
     location: '',
+    locationData: { address: '', mode: 'manual', coordinates: { lat: '', lng: '' } },
     tags: '',
   });
   const [images, setImages] = useState([]);
@@ -58,7 +61,15 @@ const CreateListing = () => {
             price: l.price?.toString() || '',
             negotiable: l.negotiable || false,
             condition: l.condition || 'good',
-            location: l.location || '',
+            location: typeof l.location === 'string' ? l.location : l.location?.address || '',
+            locationData: typeof l.location === 'object' ? {
+              address: l.location?.address || '',
+              mode: l.location?.mode || 'manual',
+              coordinates: {
+                lat: l.location?.coordinates?.lat || '',
+                lng: l.location?.coordinates?.lng || '',
+              },
+            } : { address: l.location || '', mode: 'manual', coordinates: { lat: '', lng: '' } },
             tags: l.tags?.join(', ') || '',
           });
           if (l.images?.length) {
@@ -118,7 +129,10 @@ const CreateListing = () => {
       formData.append('price', form.price || '0');
       formData.append('negotiable', form.negotiable);
       formData.append('condition', form.condition);
-      if (form.location.trim()) formData.append('location', form.location.trim());
+      if (form.locationData?.address?.trim()) formData.append('locationAddress', form.locationData.address.trim());
+      formData.append('locationMode', form.locationData?.mode || 'manual');
+      if (form.locationData?.coordinates?.lat) formData.append('locationLat', form.locationData.coordinates.lat);
+      if (form.locationData?.coordinates?.lng) formData.append('locationLng', form.locationData.coordinates.lng);
       if (form.tags.trim()) {
         const tags = form.tags.split(',').map((t) => t.trim()).filter(Boolean);
         tags.forEach((t) => formData.append('tags', t));
@@ -153,7 +167,11 @@ const CreateListing = () => {
   return (
     <div className="page-container" style={{ maxWidth: 800, margin: '0 auto' }}>
       <div className="page-header">
-        <h1 className="page-title">{isEdit ? 'Edit Listing' : 'Post New Item'}</h1>
+        <div>
+          <BackButton fallback="/marketplace" />
+          <h1 className="page-title">{isEdit ? 'Edit Listing' : 'Post New Item'}</h1>
+          {!isEdit && <p className="page-subtitle">2 uploads are free. After that, 1 product upload uses 1 token worth INR 5.</p>}
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="form-card">
@@ -256,15 +274,10 @@ const CreateListing = () => {
 
         {/* Location */}
         <div className="form-group">
-          <label className="form-label" htmlFor="location">Location</label>
-          <input
-            id="location"
-            name="location"
-            type="text"
-            className="form-input"
-            placeholder="e.g., Hostel A, Library, Canteen"
-            value={form.location}
-            onChange={handleChange}
+          <label className="form-label">Location and Product Tracking</label>
+          <LocationPicker
+            value={form.locationData}
+            onChange={(locationData) => setForm((prev) => ({ ...prev, locationData, location: locationData.address || '' }))}
           />
         </div>
 

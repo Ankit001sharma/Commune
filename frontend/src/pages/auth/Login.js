@@ -23,12 +23,7 @@ const Login = () => {
       <div className="auth-left">
         <div className="auth-brand">
           <div className="auth-brand-logo">
-            <svg width="56" height="56" viewBox="0 0 64 64" fill="none">
-              <defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#6C63FF"/><stop offset="100%" stopColor="#3B82F6"/></linearGradient></defs>
-              <rect width="64" height="64" rx="14" fill="url(#lg)"/>
-              <text x="32" y="44" textAnchor="middle" fill="white" fontFamily="Inter,sans-serif" fontWeight="800" fontSize="32">CX</text>
-            </svg>
-            <span className="auth-brand-name">CommuneX</span>
+            <img src="/logo.jpeg" alt="CommuneX" className="auth-logo-img" />
           </div>
           <p className="auth-brand-tagline">
             Your campus marketplace for buying, selling, exchanging products and discovering services within a secure college ecosystem.

@@ -7,7 +7,7 @@ const protect = async (req, res, next) => {
   try {
     let token;
 
-    console.log('AUTH HEADER:', req.headers.authorization);
+    
 
     if (
       req.headers.authorization &&
@@ -24,7 +24,7 @@ const protect = async (req, res, next) => {
       }
     }
 
-    console.log('TOKEN:', token);
+    
 
     if (!token) {
       return res.status(401).json({
@@ -42,7 +42,7 @@ const protect = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, config.jwt.secret);
-    console.log('DECODED:', decoded);
+    
 
     if (!decoded?.id) {
       return res.status(401).json({

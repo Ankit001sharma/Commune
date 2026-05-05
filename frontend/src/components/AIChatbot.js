@@ -36,7 +36,7 @@ const AIChatbot = () => {
       const { data } = await aiAPI.chatbot(userMessage.content);
       const botMessage = {
         role: 'bot',
-        content: data.data?.response || 'I\'m not sure how to help with that. Try asking about marketplace items, services, or how to use the platform.',
+        content: data.data?.message || data.data?.response || 'I\'m not sure how to help with that. Try asking about marketplace items, services, or how to use the platform.',
         time: new Date(),
       };
       setMessages((prev) => [...prev, botMessage]);

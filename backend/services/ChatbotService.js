@@ -1,7 +1,21 @@
-/**
- * AI Chatbot Service
- * Rule-based + keyword-matching chatbot for platform navigation assistance.
- */
+const config = require('../config');
+
+const SYSTEM_PROMPT = `
+You are the CommuneX assistant for a campus marketplace and service exchange app.
+Know these exact platform rules:
+- Users must log in before using the main website features.
+- Marketplace users can post products, browse listings, save items, contact sellers, and use secure escrow transactions.
+- Location supports manual entry and live browser location, with OpenStreetMap tracking on product details when coordinates are available.
+- Pricing is token based: 2 free product uploads, then 1 product upload costs 1 token worth INR 5.
+- Plans: Starter INR 20 for 5 uploads, Popular INR 45 for 12 uploads, Pro INR 80 for 25 uploads.
+- Tokens can later be used across services such as product listing, service listing, and chat features.
+- Recommendations are based on saved items, searches, viewed categories, and popular marketplace activity.
+- Admin accounts can review users, listings, services, transactions, and platform metrics.
+Answer general knowledge questions directly when the user asks them.
+For CommuneX questions, guide users to the correct page or action.
+Do not invent CommuneX sections that do not exist.
+Keep answers brief, helpful, and conversational.
+`;
 
 class ChatbotService {
   constructor() {
@@ -10,6 +24,12 @@ class ChatbotService {
         patterns: ['hello', 'hi', 'hey', 'greetings', 'good morning', 'good evening'],
         response: 'Hello! Welcome to CommuneX. I can help you navigate the platform. What would you like to do?',
         suggestions: ['Browse marketplace', 'Find services', 'Community posts', 'How to sell'],
+      },
+      {
+        patterns: ['who are you', 'what are you', 'your name', 'about you'],
+        response:
+          'I am the CommuneX Assistant, your AI helper for the campus marketplace. I can answer general questions and help you use listings, services, chats, payments, tokens, recommendations, locations, and admin tools.',
+        suggestions: ['Marketplace help', 'Tokens and pricing', 'Location tracking', 'Recommendations'],
       },
       {
         patterns: ['sell', 'list item', 'post item', 'create listing', 'how to sell'],
@@ -80,7 +100,56 @@ class ChatbotService {
     };
   }
 
-  getResponse(userMessage) {
+  async getGroqResponse(userMessage) {
+    const keys = config.groq.apiKeys || [];
+    if (!keys.length || typeof fetch !== 'function') return null;
+
+    for (const key of keys) {
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: config.groq.model,
+            temperature: 0.45,
+            max_tokens: 550,
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: userMessage },
+            ],
+          }),
+        });
+
+        if (!response.ok) continue;
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content?.trim();
+        if (content) return content;
+      } catch (_) {
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  async getResponse(userMessage) {
+    try {
+      const groqMessage = await this.getGroqResponse(userMessage);
+      if (groqMessage) {
+        return {
+          message: groqMessage,
+          suggestions: ['Marketplace', 'Transactions', 'Recommendations', 'Dashboard'],
+          confidence: 0.95,
+          provider: 'groq',
+        };
+      }
+    } catch (error) {
+      console.error('Groq chatbot fallback:', error.message);
+    }
+
     const message = userMessage.toLowerCase().trim();
 
     for (const intent of this.intents) {

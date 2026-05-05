@@ -124,12 +124,24 @@ export const transactionAPI = {
   cancel: (id) => api.put(`/transactions/${id}/cancel`),
 };
 
+export const tokenAPI = {
+  getPricing: () => api.get('/tokens/pricing'),
+  purchase: (plan) => api.post('/tokens/purchase', { plan }),
+};
+
 // ===== AI =====
 export const aiAPI = {
   getRecommendations: (params) => api.get('/ai/recommendations', { params }),
   getRecommendationsV2: (params) => api.get('/recommendations', { params }),
   search: (q, type) => api.get('/ai/search', { params: { q, type } }),
   chatbot: (message) => api.post('/ai/chatbot', { message }),
+};
+
+export const adminAPI = {
+  getOverview: () => api.get('/admin/overview'),
+  getUsers: () => api.get('/admin/users'),
+  updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
+  sendRecommendationEmails: () => api.post('/admin/recommendation-emails'),
 };
 
 export default api;

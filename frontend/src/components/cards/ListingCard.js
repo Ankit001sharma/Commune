@@ -28,6 +28,7 @@ const ListingCard = ({ listing }) => {
   };
 
   const imageUrl = resolveImageUrl(listing.images?.[0]?.url);
+  const locationLabel = typeof listing.location === 'string' ? listing.location : listing.location?.address;
 
   return (
     <div
@@ -63,6 +64,7 @@ const ListingCard = ({ listing }) => {
         <div className="card-description">
           {listing.description?.slice(0, 60)}...
         </div>
+        {locationLabel && <div className="text-muted" style={{ fontSize: '0.78rem', marginBottom: 10 }}>{locationLabel}</div>}
 
         <div className="card-meta">
           <span className="card-price">

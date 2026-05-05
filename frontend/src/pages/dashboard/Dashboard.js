@@ -168,7 +168,7 @@ const Dashboard = () => {
         </div>
 
         <div className="stat-card" onClick={() => navigate('/chat')} style={{ cursor: 'pointer' }}>
-          <div className="stat-icon" style={{ background: 'rgba(59, 130, 246, 0.1)', color: 'var(--cx-secondary)' }}>
+          <div className="stat-icon" style={{ background: 'rgba(170, 205, 220, 0.24)', color: 'var(--cx-secondary)' }}>
             <MessageCircleIcon size={24} />
           </div>
           <div className="stat-info">
@@ -178,7 +178,7 @@ const Dashboard = () => {
         </div>
 
         <div className="stat-card" onClick={() => navigate('/activity')} style={{ cursor: 'pointer' }}>
-          <div className="stat-icon" style={{ background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed' }}>
+          <div className="stat-icon" style={{ background: 'rgba(210, 196, 180, 0.26)', color: 'var(--cx-primary-dark)' }}>
             <ZapIcon size={24} />
           </div>
           <div className="stat-info">

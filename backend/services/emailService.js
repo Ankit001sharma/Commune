@@ -71,7 +71,30 @@ const sendWelcomeEmail = async (to, firstName) => {
   }
 };
 
+const sendRecommendationEmail = async ({ to, firstName, items = [] }) => {
+  const transporter = getTransporter();
+  const listHtml = items.length
+    ? items.map((item) => `<li><strong>${item.title}</strong> - ${item.price === 0 ? 'Free' : `INR ${item.price}`}</li>`).join('')
+    : '<li>Fresh marketplace picks are waiting for you.</li>';
+
+  await transporter.sendMail({
+    from: config.email.from,
+    to,
+    subject: 'Recommended for you on CommuneX',
+    text: `Hello ${firstName || 'User'}, we found CommuneX items you may like: ${items.map((item) => item.title).join(', ') || 'new marketplace picks'}.`,
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #1f2937;">
+        <h2>Hello ${firstName || 'User'},</h2>
+        <p>Based on your searches, saved items, and viewed categories, here are a few picks for you:</p>
+        <ul>${listHtml}</ul>
+        <p>Open CommuneX to view more recommendations.</p>
+      </div>
+    `,
+  });
+};
+
 module.exports = {
   sendOtpEmail,
   sendWelcomeEmail,
+  sendRecommendationEmail,
 };

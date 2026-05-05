@@ -30,6 +30,18 @@ exports.naturalLanguageSearch = async (req, res, next) => {
     }
 
     const results = await RecommendationEngine.naturalLanguageSearch(q, type);
+    if (req.user?._id) {
+      const terms = q.toLowerCase().split(/\s+/).filter((word) => word.length > 2);
+      await User.findByIdAndUpdate(req.user._id, {
+        $push: {
+          'recommendationProfile.searches': {
+            $each: terms,
+            $position: 0,
+            $slice: 30,
+          },
+        },
+      });
+    }
     sendResponse(res, 200, results, 'Search results');
   } catch (error) {
     next(error);
@@ -43,7 +55,7 @@ exports.chatbot = async (req, res, next) => {
       return sendResponse(res, 400, null, 'Message is required');
     }
 
-    const response = ChatbotService.getResponse(message);
+    const response = await ChatbotService.getResponse(message);
     sendResponse(res, 200, response, 'Chatbot response');
   } catch (error) {
     next(error);

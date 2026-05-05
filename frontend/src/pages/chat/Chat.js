@@ -7,6 +7,7 @@ import socketService from '../../services/socket';
 import {
   SendIcon, SearchIcon, MessageCircleIcon, CheckIcon,
 } from '../../components/Icons';
+import BackButton from '../../components/common/BackButton';
 
 const Chat = () => {
   const { id: activeId } = useParams();
@@ -14,7 +15,6 @@ const Chat = () => {
   const { user } = useAuth();
   const {
     markMessageNotificationsByTargetRead,
-    refreshUnreadMessages,
   } = useNotifications();
 
   const [conversations, setConversations] = useState([]);
@@ -87,21 +87,22 @@ const Chat = () => {
     resolveConversationFromSender();
   }, [activeId, loading, conversations, navigate]);
 
-  // Fetch active conversation
+// Fetch active conversation
   useEffect(() => {
-    if (!activeId || !conversations.length) {
+    if (!activeId) {
       setActiveConversation(null);
       setMessages([]);
       return;
     }
 
-    // ✅ ADD THIS (IMPORTANT FIX)
+    if (!conversations.length) return;
+
     const isValidConversation = conversations.some(
       (conv) => conv._id === activeId
     );
 
     if (!isValidConversation) {
-      console.log("Waiting for conversations to update:", activeId);
+      console.log("Waiting for valid conversation:", activeId);
       return;
     }
 
@@ -112,7 +113,6 @@ const Chat = () => {
         setActiveConversation(data.data);
         setMessages(data.data.messages || []);
 
-        // 👇 KEEP YOUR ORIGINAL LOGIC (IMPORTANT)
         setConversations((prev) =>
           prev.map((conv) =>
             conv._id === activeId ? { ...conv, unreadCount: 0 } : conv
@@ -120,18 +120,14 @@ const Chat = () => {
         );
 
         const otherParticipantIds = (data.data.participants || [])
-          .map((participant) =>
-            typeof participant === 'string' ? participant : participant._id
-          )
-          .filter((participantId) => participantId !== user?._id);
+          .map((p) => (typeof p === 'string' ? p : p._id))
+          .filter((id) => id !== user?._id);
 
-        await Promise.all(
-          otherParticipantIds.map((participantId) =>
-            markMessageNotificationsByTargetRead(participantId)
+        Promise.all(
+          otherParticipantIds.map((id) =>
+            markMessageNotificationsByTargetRead(id)
           )
         );
-
-        await refreshUnreadMessages();
 
         shouldAutoScrollRef.current = true;
         isFirstRenderRef.current = true;
@@ -145,7 +141,11 @@ const Chat = () => {
     };
 
     fetchConversation();
-  }, [activeId, conversations]);
+
+  }, [activeId, user?._id, markMessageNotificationsByTargetRead]); // ✅ FIXED
+
+
+
   useEffect(() => {
     if (!messagesContainerRef.current || messages.length === 0) return;
     if (!shouldAutoScrollRef.current) return;
@@ -393,6 +393,7 @@ const Chat = () => {
             {/* Chat Header */}
             <div className="chat-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <BackButton fallback="/chat" />
                 <div className="chat-item-avatar">
                   {getInitials(getOtherParticipant(activeConversation))}
                 </div>

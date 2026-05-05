@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
+import 'leaflet/dist/leaflet.css';
 import './index.css';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));

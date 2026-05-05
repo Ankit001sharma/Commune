@@ -29,5 +29,13 @@ module.exports = {
     pass: process.env.SMTP_PASS,
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
   },
+  groq: {
+    apiKey: process.env.GROQ_API_KEY,
+    apiKeys: (process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || '')
+      .split(',')
+      .map((key) => key.trim())
+      .filter(Boolean),
+    model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+  },
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
 };

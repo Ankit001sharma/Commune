@@ -10,6 +10,8 @@ import {
 import { toast } from '../../components/ui/Toast';
 import AppImage from "../../components/common/AppImage";
 import { resolveImageUrl } from '../../utils/image';
+import LiveTrackingMap from '../../components/location/LiveTrackingMap';
+import BackButton from '../../components/common/BackButton';
 
 const ListingDetail = () => {
   const { id } = useParams();
@@ -106,9 +108,11 @@ const ListingDetail = () => {
   if (!listing) return null;
 
   const images = listing.images || [];
+  const locationLabel = typeof listing.location === 'string' ? listing.location : listing.location?.address;
 
   return (
     <div className="page-container">
+      <BackButton fallback="/marketplace" />
       {/* Breadcrumb */}
       <div className="breadcrumb">
         <Link to="/marketplace">Marketplace</Link>
@@ -173,8 +177,10 @@ const ListingDetail = () => {
           <div className="detail-meta">
             <span><ClockIcon size={16} /> Listed {timeAgo(listing.createdAt)}</span>
             <span><EyeIcon size={16} /> {listing.views || 0} views</span>
-            {listing.location && <span><MapPinIcon size={16} /> {listing.location}</span>}
+            {locationLabel && <span><MapPinIcon size={16} /> {locationLabel}</span>}
           </div>
+
+          <LiveTrackingMap location={listing.location} title={`${listing.title} tracking`} />
 
           <div className="detail-section">
             <h3>Description</h3>
