@@ -1,5 +1,5 @@
-import React from 'react';
-import { MapContainer, Marker, Popup, TileLayer, ZoomControl } from 'react-leaflet';
+import React, { useEffect, useMemo } from 'react';
+import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
 const markerIcon = new L.Icon({
@@ -12,8 +12,27 @@ const markerIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
+const shouldDebugLocation = () => {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage?.getItem('cx_debug_location') === 'true';
+};
+
+const MapUpdater = ({ lat, lng }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    if (shouldDebugLocation()) {
+      console.debug('[location] map update', { lat, lng });
+    }
+    map.setView([lat, lng], map.getZoom(), { animate: true });
+  }, [lat, lng, map]);
+
+  return null;
+};
+
 const LeafletLocationMap = ({ lat, lng, label = 'Selected location', className = 'leaflet-location-map' }) => {
-  const position = [Number(lat), Number(lng)];
+  const position = useMemo(() => [Number(lat), Number(lng)], [lat, lng]);
 
   if (!position[0] || !position[1]) return null;
 
@@ -24,6 +43,7 @@ const LeafletLocationMap = ({ lat, lng, label = 'Selected location', className =
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <ZoomControl position="bottomright" />
+      <MapUpdater lat={position[0]} lng={position[1]} />
       <Marker position={position} icon={markerIcon}>
         <Popup>{label}</Popup>
       </Marker>

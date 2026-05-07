@@ -64,12 +64,15 @@ const listingSchema = new mongoose.Schema(
     },
     location: {
       address: { type: String, default: 'Campus' },
+      locationText: { type: String, default: null },
       mode: { type: String, enum: ['manual', 'live'], default: 'manual' },
       coordinates: {
         lat: { type: Number, default: null },
         lng: { type: Number, default: null },
       },
       updatedAt: { type: Date, default: null },
+      trackingActive: { type: Boolean, default: false },
+      textUpdatedAt: { type: Date, default: null },
     },
     tags: [{ type: String, lowercase: true, trim: true }],
     views: {

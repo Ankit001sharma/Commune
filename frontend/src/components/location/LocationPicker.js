@@ -1,20 +1,47 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MapPinIcon } from '../Icons';
 import LeafletLocationMap from './LeafletLocationMap';
+import { toast } from '../ui/Toast';
 
 const LocationPicker = ({ value, onChange }) => {
   const [detecting, setDetecting] = useState(false);
+  const [trackingActive, setTrackingActive] = useState(false);
+  const watchIdRef = useRef(null);
+  const lastUpdateRef = useRef(0);
   const location = value || { address: '', mode: 'manual', coordinates: { lat: '', lng: '' } };
   const lat = Number(location.coordinates?.lat);
   const lng = Number(location.coordinates?.lng);
 
   const update = (patch) => onChange({ ...location, ...patch });
 
-  const detectLiveLocation = () => {
-    if (!navigator.geolocation) return;
+  const stopLiveTracking = () => {
+    if (watchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    setTrackingActive(false);
+    setDetecting(false);
+  };
+
+  const startLiveTracking = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation not supported in this browser');
+      return;
+    }
+
+    if (watchIdRef.current !== null) {
+      return;
+    }
+
     setDetecting(true);
-    navigator.geolocation.getCurrentPosition(
+    setTrackingActive(true);
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
+        const now = Date.now();
+        if (now - lastUpdateRef.current < 2000) return;
+        lastUpdateRef.current = now;
+
         onChange({
           ...location,
           mode: 'live',
@@ -24,21 +51,44 @@ const LocationPicker = ({ value, onChange }) => {
             lng: pos.coords.longitude.toFixed(6),
           },
         });
+
         setDetecting(false);
       },
-      () => setDetecting(false),
-      { enableHighAccuracy: true, timeout: 10000 }
+      (error) => {
+        stopLiveTracking();
+        if (error?.code === 1) {
+          toast.error('Location permission denied');
+        } else if (error?.code === 3) {
+          toast.error('Location request timed out');
+        } else {
+          toast.error('Unable to fetch live location');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
     );
   };
+
+  useEffect(() => () => stopLiveTracking(), []);
 
   return (
     <div className="location-picker">
       <div className="segmented-control" role="tablist" aria-label="Location mode">
-        <button type="button" className={location.mode !== 'live' ? 'active' : ''} onClick={() => update({ mode: 'manual' })}>
+        <button
+          type="button"
+          className={location.mode !== 'live' ? 'active' : ''}
+          onClick={() => {
+            stopLiveTracking();
+            update({ mode: 'manual' });
+          }}
+        >
           Manual
         </button>
-        <button type="button" className={location.mode === 'live' ? 'active' : ''} onClick={detectLiveLocation}>
-          {detecting ? 'Detecting...' : 'Live'}
+        <button
+          type="button"
+          className={location.mode === 'live' ? 'active' : ''}
+          onClick={trackingActive ? stopLiveTracking : startLiveTracking}
+        >
+          {detecting ? 'Detecting...' : trackingActive ? 'Stop Live' : 'Live'}
         </button>
       </div>
 

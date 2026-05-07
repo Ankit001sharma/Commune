@@ -44,7 +44,9 @@ const ListingCard = ({ listing }) => {
   };
 
   const imageUrl = resolveImageUrl(listing.images?.[0]?.url);
-  const locationLabel = typeof listing.location === 'string' ? listing.location : listing.location?.address;
+  const locationLabel = typeof listing.location === 'string'
+    ? listing.location
+    : listing.location?.locationText || listing.location?.address;
 
   const handleOpen = () => {
     if (!canNavigate) {

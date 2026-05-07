@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { listingAPI, chatAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -8,14 +8,144 @@ import {
   ChevronRightIcon,
 } from '../../components/Icons';
 import { toast } from '../../components/ui/Toast';
-import AppImage from "../../components/common/AppImage";
+import AppImage from '../../components/common/AppImage';
 import { resolveImageUrl } from '../../utils/image';
 import LiveTrackingMap from '../../components/location/LiveTrackingMap';
+import LeafletLocationMap from '../../components/location/LeafletLocationMap';
 import BackButton from '../../components/common/BackButton';
 
 const isValidObjectId = (value) => (
   /^[a-fA-F0-9]{24}$/.test(`${value || ''}`)
 );
+
+const shouldDebugLocation = () => {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage?.getItem('cx_debug_location') === 'true';
+};
+
+const buyerLocationStorageKey = 'cx_buyer_location';
+const buyerGeocodeCacheKey = 'cx_buyer_geocode_cache';
+
+const buildDefaultBuyerLocation = () => ({
+  mode: 'manual',
+  manualAddress: '',
+  displayText: '',
+  coordinates: { lat: '', lng: '' },
+});
+
+const loadBuyerLocation = () => {
+  if (typeof window === 'undefined') return buildDefaultBuyerLocation();
+  try {
+    const raw = window.localStorage?.getItem(buyerLocationStorageKey);
+    if (!raw) return buildDefaultBuyerLocation();
+    const parsed = JSON.parse(raw);
+    const base = buildDefaultBuyerLocation();
+    return {
+      ...base,
+      ...parsed,
+      manualAddress: parsed?.manualAddress ?? parsed?.address ?? base.manualAddress,
+      displayText: parsed?.displayText ?? parsed?.locationText ?? parsed?.address ?? base.displayText,
+      coordinates: {
+        ...base.coordinates,
+        ...(parsed?.coordinates || {}),
+      },
+    };
+  } catch (_) {
+    return buildDefaultBuyerLocation();
+  }
+};
+
+const loadBuyerGeocodeCache = () => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage?.getItem(buyerGeocodeCacheKey);
+    return raw ? JSON.parse(raw) : {};
+  } catch (_) {
+    return {};
+  }
+};
+
+const saveBuyerGeocodeCache = (cache) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage?.setItem(buyerGeocodeCacheKey, JSON.stringify(cache));
+  } catch (_) {
+    // ignore
+  }
+};
+
+const sanitizeAddress = (input = '') => (
+  `${input || ''}`
+    .replace(/\s+/g, ' ')
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/,{2,}/g, ',')
+    .replace(/\s*[.\-]+\s*$/g, '')
+    .replace(/\s*,\s*$/g, '')
+    .trim()
+);
+
+const buildGeocodeCandidates = (input = '') => {
+  const sanitized = sanitizeAddress(input);
+  const parts = sanitized
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const candidates = [];
+  if (sanitized) candidates.push(sanitized);
+  if (parts.length > 1) candidates.push(parts.slice(1).join(', '));
+  if (parts.length > 2) candidates.push(parts.slice(-2).join(', '));
+
+  return candidates.filter((candidate, index) => (
+    candidate && candidates.indexOf(candidate) === index
+  ));
+};
+
+const parseCoordinate = (value, min, max) => {
+  if (value === undefined || value === null || value === '') return null;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  if (num < min || num > max) return null;
+  return num;
+};
+
+const toRadians = (value) => (value * Math.PI) / 180;
+
+const haversineKm = (lat1, lng1, lat2, lng2) => {
+  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return null;
+  const radius = 6371;
+  const dLat = toRadians(lat2 - lat1);
+  const dLng = toRadians(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return radius * c;
+};
+
+const forwardGeocodeBuyer = async (query, signal) => {
+  if (!query) return null;
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&limit=1&addressdetails=1`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Accept-Language': 'en',
+    },
+    signal,
+  });
+
+  if (!response.ok) return null;
+  const data = await response.json();
+  const result = Array.isArray(data) ? data[0] : null;
+  if (!result?.lat || !result?.lon) return null;
+
+  const lat = parseCoordinate(result.lat, -90, 90);
+  const lng = parseCoordinate(result.lon, -180, 180);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  const text = result.display_name || query;
+  return { lat, lng, text };
+};
 
 const ListingDetail = () => {
   const { id } = useParams();
@@ -27,6 +157,25 @@ const ListingDetail = () => {
   const [error, setError] = useState(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [deleting, setDeleting] = useState(false);
+  const [trackingActive, setTrackingActive] = useState(false);
+  const [trackingStatus, setTrackingStatus] = useState('idle');
+  const [trackingError, setTrackingError] = useState(null);
+  const [geocodeRetrying, setGeocodeRetrying] = useState(false);
+
+  const [buyerLocation, setBuyerLocation] = useState(() => loadBuyerLocation());
+  const [buyerStatus, setBuyerStatus] = useState('idle');
+  const [buyerError, setBuyerError] = useState(null);
+  const [buyerGeocodeStatus, setBuyerGeocodeStatus] = useState('idle');
+  const [buyerGeocodeError, setBuyerGeocodeError] = useState(null);
+
+  const watchIdRef = useRef(null);
+  const lastSentRef = useRef(0);
+  const lastCoordsRef = useRef(null);
+  const pollRef = useRef(null);
+  const trackingActiveRef = useRef(false);
+  const buyerWatchIdRef = useRef(null);
+  const buyerLastUpdateRef = useRef(0);
+  const buyerGeocodeAbortRef = useRef(null);
 
   useEffect(() => {
     let isActive = true;
@@ -92,16 +241,515 @@ const ListingDetail = () => {
     };
   }, [id]);
 
-  const isFavorited = listing ? isItemSaved(listing._id, 'listing') : false;
+  useEffect(() => {
+    trackingActiveRef.current = trackingActive;
+  }, [trackingActive]);
 
+  const isFavorited = listing ? isItemSaved(listing._id, 'listing') : false;
   const isOwner = user?._id === listing?.seller?._id;
+
+  const normalizedLocation = useMemo(() => {
+    if (!listing?.location) return null;
+    if (typeof listing.location === 'string') {
+      return {
+        address: listing.location,
+        locationText: listing.location,
+        mode: 'manual',
+        trackingActive: false,
+        coordinates: { lat: null, lng: null },
+        updatedAt: null,
+      };
+    }
+
+    return {
+      ...listing.location,
+      locationText: listing.location.locationText || listing.location.address || null,
+      coordinates: listing.location.coordinates || { lat: null, lng: null },
+    };
+  }, [listing]);
+
+  const remoteTrackingActive = Boolean(normalizedLocation?.trackingActive);
+  const isLiveProductLocation = normalizedLocation?.mode === 'live';
+  const isManualProductLocation = normalizedLocation?.mode === 'manual';
+
+  const sellerLat = parseCoordinate(normalizedLocation?.coordinates?.lat, -90, 90);
+  const sellerLng = parseCoordinate(normalizedLocation?.coordinates?.lng, -180, 180);
+
+  const buyerTrackingActive = buyerLocation.mode === 'live';
+  const rawBuyerLat = parseCoordinate(buyerLocation?.coordinates?.lat, -90, 90);
+  const rawBuyerLng = parseCoordinate(buyerLocation?.coordinates?.lng, -180, 180);
+  const buyerLat = isLiveProductLocation && !buyerTrackingActive ? null : rawBuyerLat;
+  const buyerLng = isLiveProductLocation && !buyerTrackingActive ? null : rawBuyerLng;
+
+  const distanceKm = useMemo(
+    () => haversineKm(sellerLat, sellerLng, buyerLat, buyerLng),
+    [sellerLat, sellerLng, buyerLat, buyerLng]
+  );
+
+  const distanceLabel = useMemo(() => {
+    if (!Number.isFinite(distanceKm)) return null;
+    return `${distanceKm.toFixed(1)} km away`;
+  }, [distanceKm]);
+
+  const sellerMapsUrl = Number.isFinite(sellerLat) && Number.isFinite(sellerLng)
+    ? `https://www.google.com/maps?q=${sellerLat},${sellerLng}`
+    : null;
+
+  const sellerHasCoords = Number.isFinite(sellerLat) && Number.isFinite(sellerLng);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage?.setItem(
+        buyerLocationStorageKey,
+        JSON.stringify(buyerLocation)
+      );
+    } catch (_) {
+      // ignore storage errors
+    }
+  }, [buyerLocation]);
+
+  const updateBuyerLocation = (patch) => {
+    setBuyerLocation((prev) => ({
+      ...prev,
+      ...patch,
+      coordinates: {
+        ...(prev.coordinates || {}),
+        ...(patch.coordinates || {}),
+      },
+    }));
+  };
+
+  const stopBuyerLive = () => {
+    if (buyerWatchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(buyerWatchIdRef.current);
+      buyerWatchIdRef.current = null;
+    }
+    setBuyerStatus('idle');
+    setBuyerGeocodeStatus('idle');
+    setBuyerLocation((prev) => ({
+      ...prev,
+      mode: 'manual',
+      displayText: prev.manualAddress || '',
+    }));
+  };
+
+  const startBuyerLive = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation not supported in this browser');
+      return;
+    }
+
+    if (buyerWatchIdRef.current !== null) return;
+
+    setBuyerError(null);
+    setBuyerStatus('starting');
+    setBuyerLocation((prev) => ({
+      ...prev,
+      mode: 'live',
+      displayText: 'Live detected location',
+    }));
+    setBuyerGeocodeStatus('idle');
+
+    if (shouldDebugLocation()) {
+      console.debug('[location] buyer tracking start');
+    }
+
+    buyerWatchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now();
+        if (now - buyerLastUpdateRef.current < 4000) return;
+        buyerLastUpdateRef.current = now;
+
+        const lat = pos.coords.latitude.toFixed(6);
+        const lng = pos.coords.longitude.toFixed(6);
+
+        setBuyerLocation((prev) => ({
+          ...prev,
+          mode: 'live',
+          displayText: 'Live detected location',
+          coordinates: { lat, lng },
+        }));
+
+        setBuyerStatus('active');
+        setBuyerGeocodeError(null);
+
+        if (shouldDebugLocation()) {
+          console.debug('[location] buyer geolocation update', { lat, lng });
+        }
+      },
+      (error) => {
+        if (buyerWatchIdRef.current !== null && navigator.geolocation) {
+          navigator.geolocation.clearWatch(buyerWatchIdRef.current);
+          buyerWatchIdRef.current = null;
+        }
+
+        setBuyerLocation((prev) => ({
+          ...prev,
+          mode: 'manual',
+          displayText: prev.manualAddress || '',
+        }));
+        setBuyerStatus('error');
+
+        const message =
+          error?.code === 1
+            ? 'Location permission denied'
+            : error?.code === 3
+              ? 'Location request timed out'
+              : 'Unable to fetch live location';
+
+        setBuyerError(message);
+        toast.error(message);
+
+        if (shouldDebugLocation()) {
+          console.debug('[location] buyer geolocation error', error);
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+    );
+  };
+
+  useEffect(() => () => {
+    if (buyerWatchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(buyerWatchIdRef.current);
+      buyerWatchIdRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (buyerLocation.mode === 'live') {
+      setBuyerGeocodeStatus('idle');
+      setBuyerGeocodeError(null);
+      return;
+    }
+
+    const address = buyerLocation.manualAddress?.trim() || '';
+    if (!address) {
+      setBuyerGeocodeStatus('idle');
+      setBuyerGeocodeError(null);
+      setBuyerLocation((prev) => ({
+        ...prev,
+        coordinates: { lat: '', lng: '' },
+        displayText: prev.manualAddress || '',
+      }));
+      return;
+    }
+
+    const sanitized = sanitizeAddress(address);
+    const cache = loadBuyerGeocodeCache();
+    const cached = cache?.[sanitized];
+    const cacheFresh = cached?.updatedAt && (Date.now() - cached.updatedAt < 24 * 60 * 60 * 1000);
+    if (cached?.lat && cached?.lng && cacheFresh) {
+      setBuyerGeocodeStatus('success');
+      setBuyerGeocodeError(null);
+      setBuyerLocation((prev) => ({
+        ...prev,
+        displayText: prev.manualAddress,
+        coordinates: { lat: cached.lat, lng: cached.lng },
+      }));
+      return;
+    }
+
+    if (buyerGeocodeAbortRef.current) {
+      buyerGeocodeAbortRef.current.abort();
+      buyerGeocodeAbortRef.current = null;
+    }
+
+    const controller = new AbortController();
+    buyerGeocodeAbortRef.current = controller;
+    const requestAddress = address;
+
+    setBuyerGeocodeStatus('loading');
+    setBuyerGeocodeError(null);
+
+    const timeoutId = setTimeout(async () => {
+      const candidates = buildGeocodeCandidates(address);
+
+      if (shouldDebugLocation()) {
+        console.debug('[buyer geocode] candidates', {
+          address,
+          sanitized,
+          candidates,
+        });
+      }
+
+      let resolved = null;
+      for (const candidate of candidates) {
+        try {
+          if (shouldDebugLocation()) {
+            console.debug('[buyer geocode] request', { candidate });
+          }
+          const result = await forwardGeocodeBuyer(candidate, controller.signal);
+          if (shouldDebugLocation()) {
+            console.debug('[buyer geocode] response', result);
+          }
+          if (result?.lat && result?.lng) {
+            resolved = result;
+            break;
+          }
+        } catch (error) {
+          if (error?.name === 'AbortError') {
+            return;
+          }
+        }
+      }
+
+      if (resolved?.lat && resolved?.lng) {
+        const nextCache = {
+          ...cache,
+          [sanitized]: {
+            lat: resolved.lat,
+            lng: resolved.lng,
+            text: resolved.text || address,
+            updatedAt: Date.now(),
+          },
+        };
+        saveBuyerGeocodeCache(nextCache);
+        setBuyerGeocodeStatus('success');
+        setBuyerGeocodeError(null);
+        setBuyerLocation((prev) => {
+          if (prev.manualAddress?.trim() !== requestAddress) return prev;
+          return {
+            ...prev,
+            displayText: prev.manualAddress,
+            coordinates: { lat: resolved.lat, lng: resolved.lng },
+          };
+        });
+      } else {
+        setBuyerGeocodeStatus('error');
+        setBuyerGeocodeError('Could not detect your approximate location');
+        setBuyerLocation((prev) => {
+          if (prev.manualAddress?.trim() !== requestAddress) return prev;
+          return {
+            ...prev,
+            coordinates: { lat: '', lng: '' },
+          };
+        });
+      }
+    }, 700);
+
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [buyerLocation.manualAddress, buyerLocation.mode]);
+
+  const applyLocationUpdate = (nextLocation) => {
+    if (!nextLocation) return;
+    setListing((prev) => {
+      if (!prev) return prev;
+      return { ...prev, location: nextLocation };
+    });
+  };
+
+  const sendLocationUpdate = async (payload) => {
+    if (!listing?._id) return null;
+    try {
+      if (shouldDebugLocation()) {
+        console.debug('[location] update request', payload);
+      }
+      const { data } = await listingAPI.updateLocation(listing._id, payload);
+      const nextLocation = data?.data;
+      if (nextLocation) {
+        applyLocationUpdate(nextLocation);
+      }
+      if (shouldDebugLocation()) {
+        console.debug('[location] update response', nextLocation);
+      }
+      return nextLocation;
+    } catch (err) {
+      if (shouldDebugLocation()) {
+        console.debug('[location] update failed', err);
+      }
+      return null;
+    }
+  };
+
+  const startLiveTracking = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation not supported in this browser');
+      return;
+    }
+
+    if (watchIdRef.current !== null) return;
+
+    setTrackingError(null);
+    setTrackingStatus('starting');
+
+    if (shouldDebugLocation()) {
+      console.debug('[location] tracking start');
+    }
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(6));
+        const lng = Number(pos.coords.longitude.toFixed(6));
+        lastCoordsRef.current = { lat, lng };
+        const baseLocation = normalizedLocation || {
+          address: 'Campus',
+          locationText: 'Campus',
+          mode: 'live',
+          trackingActive: true,
+          coordinates: { lat: null, lng: null },
+        };
+
+        setTrackingActive(true);
+        setTrackingStatus('active');
+
+        applyLocationUpdate({
+          ...baseLocation,
+          mode: 'live',
+          trackingActive: true,
+          coordinates: { lat, lng },
+          updatedAt: new Date().toISOString(),
+        });
+
+        if (shouldDebugLocation()) {
+          console.debug('[location] geolocation update', { lat, lng });
+        }
+
+        const now = Date.now();
+        if (now - lastSentRef.current < 8000) return;
+        lastSentRef.current = now;
+
+        sendLocationUpdate({
+          locationLat: lat,
+          locationLng: lng,
+          locationMode: 'live',
+          trackingActive: true,
+        });
+      },
+      (error) => {
+        watchIdRef.current = null;
+        setTrackingActive(false);
+        setTrackingStatus('error');
+        setTrackingError(error?.message || 'Unable to fetch live location');
+
+        if (shouldDebugLocation()) {
+          console.debug('[location] geolocation error', error);
+        }
+
+        if (error?.code === 1) {
+          toast.error('Location permission denied');
+        } else if (error?.code === 3) {
+          toast.error('Location request timed out');
+        } else {
+          toast.error('Unable to fetch live location');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+    );
+  };
+
+  const stopLiveTracking = async () => {
+    if (watchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+
+    setTrackingStatus('idle');
+    setTrackingActive(false);
+
+    if (shouldDebugLocation()) {
+      console.debug('[location] tracking stop');
+    }
+
+    const fallbackCoords = lastCoordsRef.current || normalizedLocation?.coordinates || {};
+
+    await sendLocationUpdate({
+      locationLat: fallbackCoords.lat,
+      locationLng: fallbackCoords.lng,
+      locationMode: normalizedLocation?.mode || 'manual',
+      trackingActive: false,
+    });
+  };
+
+  useEffect(() => () => {
+    if (watchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    if (trackingActiveRef.current) {
+      stopLiveTracking();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!listing?._id || !normalizedLocation?.trackingActive || isOwner) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+
+    const pollLocation = async () => {
+      try {
+        if (shouldDebugLocation()) {
+          console.debug('[location] poll start');
+        }
+        const { data } = await listingAPI.getLocation(listing._id);
+        const nextLocation = data?.data;
+        if (nextLocation) {
+          applyLocationUpdate(nextLocation);
+        }
+        if (shouldDebugLocation()) {
+          console.debug('[location] poll response', nextLocation);
+        }
+      } catch (err) {
+        if (shouldDebugLocation()) {
+          console.debug('[location] poll failed', err);
+        }
+      }
+    };
+
+    pollLocation();
+    pollRef.current = setInterval(pollLocation, 10000);
+
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [listing?._id, normalizedLocation?.trackingActive, isOwner]);
+
+  useEffect(() => {
+    if (!shouldDebugLocation()) return;
+    console.debug('[distance] inputs', {
+      sellerLat,
+      sellerLng,
+      buyerLat,
+      buyerLng,
+      distanceKm,
+    });
+    if ([sellerLat, sellerLng, buyerLat, buyerLng].every(Number.isFinite)) {
+      console.debug('[distance] radians', {
+        sellerLat: toRadians(sellerLat),
+        sellerLng: toRadians(sellerLng),
+        buyerLat: toRadians(buyerLat),
+        buyerLng: toRadians(buyerLng),
+      });
+    }
+  }, [sellerLat, sellerLng, buyerLat, buyerLng, distanceKm]);
+
+  useEffect(() => {
+    if (!shouldDebugLocation()) return;
+    console.debug('[buyer] state', {
+      mode: buyerLocation.mode,
+      manualAddress: buyerLocation.manualAddress,
+      displayText: buyerLocation.displayText,
+      coords: buyerLocation.coordinates,
+      geocodeStatus: buyerGeocodeStatus,
+    });
+  }, [buyerLocation, buyerGeocodeStatus]);
 
   const handleFavorite = async () => {
     if (!isAuthenticated) return navigate('/login');
     try {
       await toggleSavedItem(listing._id, 'listing');
-    } catch (error) {
-      toast.error(error.message || 'Failed to update saved state');
+    } catch (err) {
+      toast.error(err.message || 'Failed to update saved state');
     }
   };
 
@@ -123,13 +771,40 @@ const ListingDetail = () => {
     if (!isAuthenticated) return navigate('/login');
     try {
       const { data } = await chatAPI.createConversation({
-        // participantId: listing.seller._id,
         recipientId: listing.seller._id,
         listingId: listing._id,
       });
       navigate(`/chat/${data.data._id}`);
     } catch (err) {
       toast.error('Failed to start conversation');
+    }
+  };
+
+  const retryManualGeocode = async () => {
+    if (!listing?._id || !normalizedLocation) return;
+
+    const address =
+      normalizedLocation.locationText ||
+      normalizedLocation.address ||
+      locationLabel || '';
+
+    if (!address.trim()) {
+      toast.error('Provide a location address to geocode');
+      return;
+    }
+
+    setGeocodeRetrying(true);
+    const next = await sendLocationUpdate({
+      locationAddress: address.trim(),
+      locationMode: 'manual',
+      forceGeocode: true,
+    });
+    setGeocodeRetrying(false);
+
+    if (!next?.coordinates?.lat || !next?.coordinates?.lng) {
+      toast.error('Unable to resolve coordinates. Try a more specific address.');
+    } else {
+      toast.success('Location coordinates updated');
     }
   };
 
@@ -230,12 +905,14 @@ const ListingDetail = () => {
   }
 
   const images = listing.images || [];
-  const locationLabel = typeof listing.location === 'string' ? listing.location : listing.location?.address;
+  const locationLabel =
+    normalizedLocation?.locationText ||
+    normalizedLocation?.address ||
+    (typeof listing.location === 'string' ? listing.location : null);
 
   return (
     <div className="page-container">
       <BackButton fallback="/marketplace" />
-      {/* Breadcrumb */}
       <div className="breadcrumb">
         <Link to="/marketplace">Marketplace</Link>
         <ChevronRightIcon size={14} />
@@ -245,15 +922,13 @@ const ListingDetail = () => {
       </div>
 
       <div className="detail-layout">
-        {/* Image Gallery */}
         <div className="detail-gallery">
           <div className="detail-main-image">
             {images.length > 0 ? (
-
-          <AppImage
-            src={resolveImageUrl(images[selectedImage]?.url)}
-            height={400}
-          />
+              <AppImage
+                src={resolveImageUrl(images[selectedImage]?.url)}
+                height={400}
+              />
             ) : (
               <div className="card-image-placeholder" style={{ height: 400 }}>
                 <ImageIcon size={64} />
@@ -275,7 +950,6 @@ const ListingDetail = () => {
           )}
         </div>
 
-        {/* Detail Info */}
         <div className="detail-info">
           <div className="detail-info-header">
             <div>
@@ -302,7 +976,104 @@ const ListingDetail = () => {
             {locationLabel && <span><MapPinIcon size={16} /> {locationLabel}</span>}
           </div>
 
-          {/*<LiveTrackingMap location={listing.location} title={`${listing.title} tracking`} /> */}
+          <div className="detail-section">
+            <h3>Location</h3>
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+                  <MapPinIcon size={16} />
+                  <span>Product Location</span>
+                </div>
+                <div className="text-muted" style={{ marginTop: 6 }}>
+                  {locationLabel || 'Location not available'}
+                </div>
+                {!sellerHasCoords && (
+                  <div style={{ marginTop: 8 }}>
+                    <div className="text-muted" style={{ fontSize: '0.82rem' }}>
+                      {normalizedLocation?.geocodeError || ''}
+                    </div>
+                    {isOwner && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={retryManualGeocode}
+                        disabled={geocodeRetrying}
+                        style={{ marginTop: 6 }}
+                      >
+                        {geocodeRetrying ? 'Retrying...' : 'Retry location lookup'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {isLiveProductLocation && (
+                <>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+                      <MapPinIcon size={16} />
+                      <span>Your Location</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className={`btn ${buyerTrackingActive ? 'btn-danger' : 'btn-secondary'}`}
+                        onClick={buyerTrackingActive ? stopBuyerLive : startBuyerLive}
+                      >
+                        {buyerTrackingActive ? 'Stop Live Location' : 'Use Live Location'}
+                      </button>
+                      {buyerStatus === 'starting' && (
+                        <span className="badge badge-warning">Detecting...</span>
+                      )}
+                      {buyerStatus === 'active' && (
+                        <span className="badge badge-success">Live</span>
+                      )}
+                    </div>
+                    {buyerTrackingActive && (
+                      <div className="text-muted" style={{ marginTop: 6, fontSize: '0.82rem' }}>
+                        Live detected location
+                      </div>
+                    )}
+                    {buyerError && (
+                      <p className="text-muted" style={{ marginTop: 8 }}>
+                        {buyerError}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+                      <MapPinIcon size={16} />
+                      <span>Distance</span>
+                    </div>
+                    <div className="text-muted" style={{ marginTop: 6 }}>
+                      {distanceLabel || 'Distance unavailable'}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {sellerMapsUrl && (
+                <a className="btn btn-ghost" href={sellerMapsUrl} target="_blank" rel="noreferrer">
+                  Open in Google Maps
+                </a>
+              )}
+            </div>
+          </div>
+
+          {normalizedLocation && isLiveProductLocation && (
+            <LiveTrackingMap location={normalizedLocation} title={`${listing.title} tracking`} showMapsLink={false} />
+          )}
+          {normalizedLocation && isManualProductLocation && sellerHasCoords && (
+            <div className="tracking-card" style={{ padding: 0 }}>
+              <LeafletLocationMap
+                lat={sellerLat}
+                lng={sellerLng}
+                label={locationLabel || 'Product location'}
+                className="tracking-map"
+              />
+            </div>
+          )}
 
           <div className="detail-section">
             <h3>Description</h3>
@@ -320,7 +1091,34 @@ const ListingDetail = () => {
             </div>
           )}
 
-          {/* Seller Card */}
+          {isOwner && (
+            <div className="detail-section">
+              <h3>Live Tracking</h3>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button
+                  className={`btn ${trackingActive ? 'btn-danger' : 'btn-secondary'}`}
+                  onClick={trackingActive ? stopLiveTracking : startLiveTracking}
+                >
+                  {trackingActive ? 'Stop Live Tracking' : 'Start Live Tracking'}
+                </button>
+                {trackingStatus === 'active' && (
+                  <span className="badge badge-success">Tracking active</span>
+                )}
+                {trackingStatus === 'starting' && (
+                  <span className="badge badge-warning">Starting...</span>
+                )}
+                {!trackingActive && remoteTrackingActive && (
+                  <span className="badge badge-info">Tracking active on server</span>
+                )}
+              </div>
+              {trackingError && (
+                <p className="text-muted" style={{ marginTop: 8 }}>
+                  {trackingError}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="detail-section">
             <h3>Seller</h3>
             <div className="detail-seller-card" onClick={() => navigate(`/profile/${listing.seller?._id}`)} style={{ cursor: 'pointer' }}>
@@ -341,7 +1139,6 @@ const ListingDetail = () => {
             </div>
           </div>
 
-          {/* Actions */}
           <div className="detail-actions">
             {isOwner ? (
               <>
