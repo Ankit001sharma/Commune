@@ -1,4 +1,5 @@
 const config = require('../config');
+const RecommendationEngine = require('./RecommendationEngine');
 
 const SYSTEM_PROMPT = `
 You are the CommuneX assistant for a campus marketplace and service exchange app.
@@ -19,6 +20,15 @@ Keep answers brief, helpful, and conversational.
 
 class ChatbotService {
   constructor() {
+    this.intents = [
+      {
+        patterns: ['hello', 'hi', 'hey', 'greetings', 'good morning', 'good evening'],
+        response: 'Hello! Welcome to CommuneX. I can help you navigate the platform. What would you like to do?',
+        suggestions: ['Browse marketplace', 'Find services', 'Community posts', 'How to sell'],
+      },
+      // ... (rest of the intents remain the same)
+    ];
+    // Re-adding the missing intents for completeness as per system rules
     this.intents = [
       {
         patterns: ['hello', 'hi', 'hey', 'greetings', 'good morning', 'good evening'],
@@ -100,9 +110,22 @@ class ChatbotService {
     };
   }
 
-  async getGroqResponse(userMessage) {
+  async getGroqResponse(userMessage, searchContext = '') {
     const keys = config.groq.apiKeys || [];
     if (!keys.length || typeof fetch !== 'function') return null;
+
+    const messages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+    ];
+
+    if (searchContext) {
+      messages.push({
+        role: 'system',
+        content: `CONTEXT: The following items/services were found in the database based on the user's query:\n${searchContext}\nIf relevant, mention them to the user.`,
+      });
+    }
+
+    messages.push({ role: 'user', content: userMessage });
 
     for (const key of keys) {
       try {
@@ -116,10 +139,7 @@ class ChatbotService {
             model: config.groq.model,
             temperature: 0.45,
             max_tokens: 550,
-            messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
-              { role: 'user', content: userMessage },
-            ],
+            messages,
           }),
         });
 
@@ -137,13 +157,25 @@ class ChatbotService {
 
   async getResponse(userMessage) {
     try {
-      const groqMessage = await this.getGroqResponse(userMessage);
+      // Perform a search to see if we can provide real-time context
+      const searchResults = await RecommendationEngine.naturalLanguageSearch(userMessage, 'all', 3);
+      let context = '';
+      
+      if (searchResults.listings?.length > 0) {
+        context += 'LISTINGS:\n' + searchResults.listings.map(l => `- ${l.title} (₹${l.price}) in ${l.category}`).join('\n') + '\n';
+      }
+      if (searchResults.services?.length > 0) {
+        context += 'SERVICES:\n' + searchResults.services.map(s => `- ${s.title} (${s.pricing?.type || 'Price on request'}) in ${s.category}`).join('\n') + '\n';
+      }
+
+      const groqMessage = await this.getGroqResponse(userMessage, context);
       if (groqMessage) {
         return {
           message: groqMessage,
           suggestions: ['Marketplace', 'Transactions', 'Recommendations', 'Dashboard'],
           confidence: 0.95,
           provider: 'groq',
+          foundItems: searchResults.listings?.length > 0 || searchResults.services?.length > 0,
         };
       }
     } catch (error) {

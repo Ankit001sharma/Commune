@@ -22,8 +22,9 @@ const typeLabels = {
 
 const PostCard = ({ post, onLike }) => {
   const navigate = useNavigate();
-  const { isAuthenticated, toggleSavedItem, isItemSaved } = useAuth();
+  const { user, isAuthenticated, toggleSavedItem, isItemSaved } = useAuth();
   const isSaved = isItemSaved(post._id, 'post');
+  const isLiked = user && post?.likes?.some((l) => (typeof l === 'string' ? l : l._id) === user._id);
 
   const getInitials = (author) => {
     if (!author) return '??';

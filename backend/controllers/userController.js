@@ -117,19 +117,41 @@ exports.saveItem = async (req, res, next) => {
         const senderName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'Someone';
         const itemName = `${item.title || itemType}`;
 
-        const notification = await Notification.create({
-          user: ownerId,
-          type: 'item_save',
-          sender: req.user._id,
-          senderName,
-          targetId: item._id.toString(),
-          text: `User ${senderName} saved your item ${itemName}`,
-          metadata: {
-            itemType,
-            itemId: item._id.toString(),
-            itemName,
-          },
-        });
+        // check if unread notification already exists
+let existingNotification =
+  await Notification.findOne({
+    user: ownerId,
+    type: 'item_save',
+    sender: req.user._id,
+    targetId: item._id.toString(),
+    isRead: false,
+  });
+
+// reuse old notification
+let notification;
+
+if (existingNotification) {
+
+  notification = existingNotification;
+
+} else {
+
+  // create new notification
+  notification = await Notification.create({
+    user: ownerId,
+    type: 'item_save',
+    sender: req.user._id,
+    senderName,
+    targetId: item._id.toString(),
+    text: `User ${senderName} saved your item ${itemName}`,
+    metadata: {
+      itemType,
+      itemId: item._id.toString(),
+      itemName,
+    },
+  });
+}
+
 
         emitNotificationToUser(ownerId, notification);
       }

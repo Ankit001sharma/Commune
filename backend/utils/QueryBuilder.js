@@ -18,10 +18,25 @@ class QueryBuilder {
 
   search(fields = ['title', 'description']) {
     if (this.queryString.search || this.queryString.q) {
-      const searchTerm = this.queryString.search || this.queryString.q;
-      const searchRegex = new RegExp(searchTerm, 'i');
-      const orConditions = fields.map((field) => ({ [field]: searchRegex }));
-      this.query = this.query.find({ $or: orConditions });
+      const searchTerm = (this.queryString.search || this.queryString.q).trim();
+      
+      // If searchTerm is multi-word or we want to leverage text index
+      // We'll use $text if it's a simple search, otherwise fallback to regex
+      if (searchTerm.length > 2) {
+        // Option 1: Full text search (requires text index)
+        // Option 2: Regex search on specific fields
+        
+        // For CommuneX, we use a hybrid approach.
+        // If we want to prioritize the text index:
+        // this.query = this.query.find({ $text: { $search: searchTerm } });
+        
+        // However, regex is more "fuzzy" for partial matches which users expect in a simple search bar
+        const searchRegex = new RegExp(searchTerm, 'i');
+        const orConditions = fields.map((field) => ({ [field]: searchRegex }));
+        
+        // Combine with existing filters
+        this.query = this.query.find({ $or: orConditions });
+      }
     }
     return this;
   }

@@ -1,123 +1,80 @@
-const { body, param, query, validationResult } = require('express-validator');
-const AppError = require('../utils/AppError');
+const { body, param, validationResult } = require('express-validator');
+const { validateRollAndDepartment, normalizeDepartment } = require('../utils/rollValidation');
 
-// Note: express-validator not in package.json, using manual validation instead
-const validate = (validations) => {
-  return async (req, res, next) => {
-    next();
-  };
-};
-
-const validateRegister = (req, res, next) => {
-  const { firstName, lastName, email, rollNumber, password, department, phone, year } = req.body;
-  const errors = [];
-
-  if (!firstName || firstName.trim().length < 2) errors.push('First name must be at least 2 characters');
-  if (!lastName || lastName.trim().length < 2) errors.push('Last name must be at least 2 characters');
-  if (!email || !/^\S+@\S+\.\S+$/.test(email)) errors.push('Valid email is required');
-  if (!rollNumber || !/^\d{2}[A-Za-z]{4}\d+$/.test(rollNumber.trim())) errors.push('Valid roll number is required');
-  if (!department || !department.trim()) errors.push('Department is required');
-  if (!phone || !`${phone}`.trim()) {
-    errors.push('Phone is required');
-  } else if (!/^[0-9]{10}$/.test(`${phone}`.trim())) {
-    errors.push('Phone number must be exactly 10 digits');
-  }
-  if (year !== undefined && ![1, 2, 3, 4].includes(Number(year))) {
-    errors.push('Year must be between 1 and 4');
-  }
-  if (!password || password.length < 8) errors.push('Password must be at least 8 characters');
-  if (password && !/[^A-Za-z0-9]/.test(password)) errors.push('Password must include at least one special character');
-
-  if (errors.length > 0) {
-    return res.status(400).json({ status: 'fail', message: errors.join('. ') });
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      status: 'fail',
+      message: errors.array().map(err => err.msg).join('. ')
+    });
   }
   next();
 };
 
-const validateLogin = (req, res, next) => {
-  const { email, password } = req.body;
-  const errors = [];
+const validateRegister = [
+  body('firstName').trim().isLength({ min: 2 }).withMessage('First name must be at least 2 characters'),
+  body('lastName').trim().isLength({ min: 2 }).withMessage('Last name must be at least 2 characters'),
+  body('email').isEmail().withMessage('Valid email is required'),
+  body('rollNumber').trim().toUpperCase().custom((value, { req }) => {
+    const department = normalizeDepartment(req.body.department);
+    const result = validateRollAndDepartment(value, department);
+    if (!result.isValid) {
+      throw new Error(result.message);
+    }
+    // Update the request body with normalized values
+    req.body.rollNumber = result.normalizedRoll;
+    req.body.department = result.expectedDepartment;
+    return true;
+  }),
+  body('department').trim().notEmpty().withMessage('Department is required'),
+  body('phone').trim().isLength({ min: 10, max: 10 }).isNumeric().withMessage('Phone number must be exactly 10 digits'),
+  body('year').optional().isInt({ min: 1, max: 4 }).withMessage('Year must be between 1 and 4'),
+  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
+    .matches(/[^A-Za-z0-9]/).withMessage('Password must include at least one special character'),
+  validate
+];
 
-  if (!email) errors.push('Email is required');
-  if (!password) errors.push('Password is required');
+const validateLogin = [
+  body('email').isEmail().withMessage('Valid email is required'),
+  body('password').notEmpty().withMessage('Password is required'),
+  validate
+];
 
-  if (errors.length > 0) {
-    return res.status(400).json({ status: 'fail', message: errors.join('. ') });
-  }
-  next();
-};
+const validateListing = [
+  body('title').trim().isLength({ min: 3 }).withMessage('Title must be at least 3 characters'),
+  body('description').trim().isLength({ min: 10 }).withMessage('Description must be at least 10 characters'),
+  body('category').notEmpty().withMessage('Category is required'),
+  body('price').isFloat({ min: 0 }).withMessage('Valid price is required'),
+  validate
+];
 
-const validateListing = (req, res, next) => {
-  const { title, description, category, price } = req.body;
-  const errors = [];
+const validateService = [
+  body('title').trim().isLength({ min: 3 }).withMessage('Title must be at least 3 characters'),
+  body('description').trim().isLength({ min: 10 }).withMessage('Description must be at least 10 characters'),
+  body('category').notEmpty().withMessage('Category is required'),
+  validate
+];
 
-  if (!title || title.trim().length < 3) errors.push('Title must be at least 3 characters');
-  if (!description || description.trim().length < 10) errors.push('Description must be at least 10 characters');
-  if (!category) errors.push('Category is required');
-  if (price === undefined || price === null || price < 0) errors.push('Valid price is required');
+const validateSaveItem = [
+  body('itemId').isMongoId().withMessage('Valid itemId is required'),
+  body('itemType').trim().toLowerCase().isIn(['listing', 'service', 'post']).withMessage('itemType must be listing, service, or post'),
+  validate
+];
 
-  if (errors.length > 0) {
-    return res.status(400).json({ status: 'fail', message: errors.join('. ') });
-  }
-  next();
-};
+const validatePost = [
+  body('title').trim().isLength({ min: 3 }).withMessage('Title must be at least 3 characters'),
+  body('content').trim().isLength({ min: 10 }).withMessage('Content must be at least 10 characters'),
+  body('type').notEmpty().withMessage('Post type is required'),
+  validate
+];
 
-const validateService = (req, res, next) => {
-  const { title, description, category } = req.body;
-  const errors = [];
-
-  if (!title || title.trim().length < 3) errors.push('Title must be at least 3 characters');
-  if (!description || description.trim().length < 2) errors.push('Description must be at least 10 characters');
-  if (!category) errors.push('Category is required');
-
-  if (errors.length > 0) {
-    return res.status(400).json({ status: 'fail', message: errors.join('. ') });
-  }
-  next();
-};
-
-const validateSaveItem = (req, res, next) => {
-  const { itemId, itemType } = req.body;
-  const errors = [];
-
-  if (!itemId || !/^[0-9a-fA-F]{24}$/.test(itemId)) {
-    errors.push('Valid itemId is required');
-  }
-
-  if (!itemType || !['listing', 'service', 'post'].includes(`${itemType}`.toLowerCase().trim())) {
-    errors.push('itemType must be listing, service, or post');
-  }
-
-  if (errors.length > 0) {
-    return res.status(400).json({ status: 'fail', message: errors.join('. ') });
-  }
-  next();
-};
-
-const validatePost = (req, res, next) => {
-  const { title, content, type } = req.body;
-  const errors = [];
-
-  if (!title || title.trim().length < 3) errors.push('Title must be at least 3 characters');
-  if (!content || content.trim().length < 10) errors.push('Content must be at least 10 characters');
-  if (!type) errors.push('Post type is required');
-
-  if (errors.length > 0) {
-    return res.status(400).json({ status: 'fail', message: errors.join('. ') });
-  }
-  next();
-};
-
-const validateObjectId = (req, res, next) => {
-  const id = req.params.id;
-  if (!/^[0-9a-fA-F]{24}$/.test(id)) {
-    return res.status(400).json({ status: 'fail', message: 'Invalid ID format' });
-  }
-  next();
-};
+const validateObjectId = [
+  param('id').isMongoId().withMessage('Invalid ID format'),
+  validate
+];
 
 module.exports = {
-  validate,
   validateRegister,
   validateLogin,
   validateListing,

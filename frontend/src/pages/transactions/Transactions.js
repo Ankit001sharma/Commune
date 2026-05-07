@@ -313,7 +313,7 @@ export const TransactionDetail = () => {
               <ShieldIcon size={18} /> Hold in Escrow
             </button>
           )}
-          {tx.status === 'escrow-held' && !isBuyer && (
+          {tx.status === 'escrow-held' && isBuyer && (
             <button className="btn btn-primary" onClick={() => handleAction('complete')} disabled={actionLoading}>
               <CheckIcon size={18} /> Complete Transaction
             </button>

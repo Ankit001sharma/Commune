@@ -1,8 +1,7 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config');
 const User = require('../models/User');
-const Conversation = require('../models/Conversation');
-const Notification = require('../models/Notification');
+const ChatService = require('./ChatService');
 
 const onlineUsers = new Map();
 let ioInstance = null;
@@ -77,31 +76,14 @@ const initializeSocket = (io) => {
       try {
         const { conversationId, content, messageType = 'text', metadata } = data;
 
-        const conversation = await Conversation.findById(conversationId);
-        if (!conversation) return;
-
-        const isParticipant = conversation.participants.some(
-          (p) => p.toString() === userId
-        );
-        if (!isParticipant) return;
-
-        const message = {
-          sender: socket.user._id,
+        const { newMessage, notifications, recipients } = await ChatService.sendMessage({
+          conversationId,
+          senderId: socket.user._id,
+          senderName: socket.user.fullName,
           content,
           messageType,
-          metadata: metadata || {},
-          readBy: [{ user: socket.user._id, readAt: new Date() }],
-        };
-
-        conversation.messages.push(message);
-        conversation.lastMessage = {
-          content,
-          sender: socket.user._id,
-          createdAt: new Date(),
-        };
-        await conversation.save();
-
-        const newMessage = conversation.messages[conversation.messages.length - 1];
+          metadata,
+        });
 
         const messageData = {
           _id: newMessage._id,
@@ -121,39 +103,21 @@ const initializeSocket = (io) => {
         // Emit to conversation room
         emitToConversation(conversationId, 'message:new', messageData);
 
-        // Persist and emit real-time notifications for other participants.
-        for (const participantId of conversation.participants) {
-          const pid = participantId.toString();
-          if (pid !== userId) {
-            const senderName = `${socket.user.firstName || ''} ${socket.user.lastName || ''}`.trim() || 'Someone';
+        // Emit notifications real-time
+        notifications.forEach((notification, index) => {
+          const pid = recipients[index].toString();
+          emitNotificationToUser(pid, notification);
 
-            const notification = await Notification.create({
-              user: participantId,
-              type: 'message',
-              sender: socket.user._id,
-              senderName,
-              targetId: userId,
-              text: `User ${senderName} sent you a message`,
+          // Legacy event
+          if (onlineUsers.has(pid)) {
+            io.to(onlineUsers.get(pid)).emit('message:notification', {
               conversationId,
-              metadata: {
-                senderId: userId,
-                messagePreview: content.slice(0, 120),
-              },
+              message: messageData,
             });
-
-            emitNotificationToUser(pid, notification);
-
-            // Keep legacy event for compatibility with older clients.
-            if (onlineUsers.has(pid)) {
-              io.to(onlineUsers.get(pid)).emit('message:notification', {
-                conversationId,
-                message: messageData,
-              });
-            }
           }
-        }
+        });
       } catch (error) {
-        socket.emit('error', { message: 'Failed to send message' });
+        socket.emit('error', { message: error.message || 'Failed to send message' });
       }
     });
 
@@ -176,24 +140,9 @@ const initializeSocket = (io) => {
     socket.on('messages:read', async (data) => {
       try {
         const { conversationId } = data;
-        const conversation = await Conversation.findById(conversationId);
-        if (!conversation) return;
-
-        let updated = false;
-        conversation.messages.forEach((msg) => {
-          if (msg.sender.toString() !== userId) {
-            const alreadyRead = msg.readBy.some(
-              (r) => r.user.toString() === userId
-            );
-            if (!alreadyRead) {
-              msg.readBy.push({ user: socket.user._id, readAt: new Date() });
-              updated = true;
-            }
-          }
-        });
+        const updated = await ChatService.markAsRead(conversationId, userId);
 
         if (updated) {
-          await conversation.save();
           socket.to(`conversation:${conversationId}`).emit('messages:read', {
             userId,
             conversationId,

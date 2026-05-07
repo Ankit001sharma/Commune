@@ -15,8 +15,8 @@ api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('cx_token');
     if (token) config.headers.Authorization = `Bearer ${token}`;
-      config.headers['Cache-Control'] = 'no-cache';
-      config.headers['Pragma'] = 'no-cache';
+    config.headers['Cache-Control'] = 'no-cache';
+    config.headers['Pragma'] = 'no-cache';
     return config;
   },
   (error) => Promise.reject(error)

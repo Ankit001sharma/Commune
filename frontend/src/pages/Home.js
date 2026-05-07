@@ -1,108 +1,104 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import AppImage from "../components/common/AppImage";
-import { resolveImageUrl } from "../utils/image";
-import { aiAPI } from "../services/api";
+import { listingAPI, aiAPI } from "../services/api";
 import ListingCard from "../components/cards/ListingCard";
-
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const Home = () => {
   const [listings, setListings] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch(`${API_BASE}/listings`)
-      .then(res => res.json())
-      .then(data => setListings(data.data))
-      .catch(err => console.error(err));
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [listingsRes, recsRes] = await Promise.all([
+          listingAPI.getAll({ limit: 4 }),
+          aiAPI.getRecommendations({ limit: 4 })
+        ]);
+        setListings(listingsRes.data.data || []);
+        setRecommendations(recsRes.data.data?.listings || []);
+      } catch (err) {
+        console.error('Failed to fetch home data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    aiAPI.getRecommendations({ limit: 4 })
-      .then(({ data }) => setRecommendations(data.data?.listings || []))
-      .catch(() => setRecommendations([]));
+    fetchData();
   }, []);
 
   return (
-    <div style={{ padding: "24px" }}>
+    <div className="page-container">
       
-      {/* Welcome */}
-      <h1>Welcome to CommuneX</h1>
-      <p>Your campus marketplace platform</p>
+      {/* Hero Section */}
+      <section style={{ 
+        padding: '40px 0', 
+        textAlign: 'center', 
+        background: 'linear-gradient(135deg, var(--cx-primary) 0%, #6366f1 100%)',
+        borderRadius: '16px',
+        color: 'white',
+        marginBottom: '40px'
+      }}>
+        <h1 style={{ fontSize: '2.5rem', marginBottom: '12px' }}>Welcome to CommuneX</h1>
+        <p style={{ fontSize: '1.1rem', opacity: 0.9, maxWidth: '600px', margin: '0 auto' }}>
+          Your exclusive campus marketplace for buying, selling, and exchanging services.
+        </p>
+      </section>
 
       {/* Latest Listings */}
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginTop: "30px"
-      }}>
-        <h2>Latest Listings</h2>
+      <section>
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "20px"
+        }}>
+          <h2 className="section-title">Latest Listings</h2>
+          <button className="btn btn-ghost" onClick={() => navigate("/marketplace")}>
+            View All Marketplace →
+          </button>
+        </div>
 
-        <button
-          onClick={() => navigate("/marketplace")}
-          style={{
-            background: "var(--cx-primary)",
-            color: "#fff",
-            border: "none",
-            padding: "8px 14px",
-            borderRadius: "6px",
-            cursor: "pointer"
-          }}
-        >
-          View All →
-        </button>
-      </div>
-
-      {/* Cards */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-        gap: "16px",
-        marginTop: "16px"
-      }}>
-        {listings.slice(0, 4).map(item => (
-          <div
-            key={item._id}
-            onClick={() => navigate(`/marketplace/${item._id}`)}
-            style={{
-              background: "#fff",
-              borderRadius: "12px",
-              overflow: "hidden",
-              cursor: "pointer",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.08)"
-            }}
-          >
-            {/* Image */}
-            <AppImage
-            src={resolveImageUrl(item.images?.[0]?.url)}
-            height={160}
-            />
-
-            {/* Content */}
-            <div style={{ padding: "10px" }}>
-              <h3 style={{ margin: "0" }}>{item.title}</h3>
-              <p style={{ margin: "5px 0", fontWeight: "600" }}>
-                ₹{item.price}
-              </p>
-              <p style={{ fontSize: "12px", color: "gray" }}>
-                {typeof item.location === 'string' ? item.location : item.location?.address}
-              </p>
-            </div>
+        {loading ? (
+          <div className="loading-container" style={{ minHeight: '200px' }}>
+            <div className="spinner" />
           </div>
-        ))}
-      </div>
+        ) : listings.length > 0 ? (
+          <div className="card-grid">
+            {listings.map(item => (
+              <ListingCard key={item._id} listing={item} />
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">
+            <p>No listings found. Be the first to post!</p>
+            <button className="btn btn-primary" onClick={() => navigate("/marketplace/create")}>Post Item</button>
+          </div>
+        )}
+      </section>
 
+      {/* Recommendations */}
       {recommendations.length > 0 && (
-        <>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "34px" }}>
-            <h2>Recommended for You</h2>
-            <button className="btn btn-secondary" onClick={() => navigate("/ai-search")}>View More</button>
+        <section style={{ marginTop: '48px' }}>
+          <div style={{ 
+            display: "flex", 
+            justifyContent: "space-between", 
+            alignItems: "center", 
+            marginBottom: "20px" 
+          }}>
+            <h2 className="section-title">Recommended for You</h2>
+            <button className="btn btn-ghost" onClick={() => navigate("/ai-search")}>
+              Personalized Search →
+            </button>
           </div>
-          <div className="card-grid" style={{ marginTop: 16 }}>
-            {recommendations.map((item) => <ListingCard key={item._id} listing={item} />)}
+          <div className="card-grid">
+            {recommendations.map((item) => (
+              <ListingCard key={item._id} listing={item} />
+            ))}
           </div>
-        </>
+        </section>
       )}
 
     </div>

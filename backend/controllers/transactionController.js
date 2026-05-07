@@ -52,17 +52,26 @@ exports.holdEscrow = async (req, res, next) => {
       return next(new AppError('Transaction is not in the correct state for escrow.', 400));
     }
 
-    // Hold amount in escrow
-    const buyer = await User.findById(req.user._id);
     const totalAmount = transaction.amount + transaction.platformFee;
 
-    if (buyer.wallet.balance < totalAmount) {
-      return next(new AppError('Insufficient wallet balance.', 400));
-    }
+    // Atomic update of buyer wallet
+    const buyer = await User.findOneAndUpdate(
+      { 
+        _id: req.user._id, 
+        'wallet.balance': { $gte: totalAmount } 
+      },
+      { 
+        $inc: { 
+          'wallet.balance': -totalAmount, 
+          'wallet.escrowHeld': totalAmount 
+        } 
+      },
+      { new: true, runValidators: true }
+    );
 
-    buyer.wallet.balance -= totalAmount;
-    buyer.wallet.escrowHeld += totalAmount;
-    await buyer.save({ validateBeforeSave: false });
+    if (!buyer) {
+      return next(new AppError('Insufficient wallet balance or account error.', 400));
+    }
 
     transaction.status = 'escrow-held';
     transaction.escrow = {
@@ -96,15 +105,28 @@ exports.completeTransaction = async (req, res, next) => {
       return next(new AppError('Escrow must be held before completing.', 400));
     }
 
-    // Release escrow to seller
-    const buyer = await User.findById(transaction.buyer);
-    const seller = await User.findById(transaction.seller);
+    // Atomic Release escrow from buyer and add to seller
+    const escrowAmount = transaction.escrow.amount;
+    const sellerAmount = transaction.amount;
 
-    buyer.wallet.escrowHeld -= transaction.escrow.amount;
-    seller.wallet.balance += transaction.amount;
+    const [buyer, seller] = await Promise.all([
+      User.findOneAndUpdate(
+        { _id: transaction.buyer, 'wallet.escrowHeld': { $gte: escrowAmount } },
+        { $inc: { 'wallet.escrowHeld': -escrowAmount } },
+        { new: true }
+      ),
+      User.findByIdAndUpdate(
+        transaction.seller,
+        { $inc: { 'wallet.balance': sellerAmount } },
+        { new: true }
+      )
+    ]);
 
-    await buyer.save({ validateBeforeSave: false });
-    await seller.save({ validateBeforeSave: false });
+    if (!buyer || !seller) {
+      // Note: In a real production app with high stakes, use Mongoose sessions/transactions.
+      // For now, this atomic $inc is much safer than manual property updates.
+      return next(new AppError('Failed to release funds. Please contact support.', 500));
+    }
 
     transaction.status = 'completed';
     transaction.completedAt = new Date();
@@ -138,12 +160,21 @@ exports.cancelTransaction = async (req, res, next) => {
       return next(new AppError('Cannot cancel this transaction.', 400));
     }
 
-    // Refund escrow if held
+    // Refund escrow atomically if held
     if (transaction.status === 'escrow-held') {
-      const buyer = await User.findById(transaction.buyer);
-      buyer.wallet.escrowHeld -= transaction.escrow.amount;
-      buyer.wallet.balance += transaction.escrow.amount;
-      await buyer.save({ validateBeforeSave: false });
+      const escrowAmount = transaction.escrow.amount;
+      const buyer = await User.findOneAndUpdate(
+        { _id: transaction.buyer, 'wallet.escrowHeld': { $gte: escrowAmount } },
+        { 
+          $inc: { 
+            'wallet.escrowHeld': -escrowAmount, 
+            'wallet.balance': escrowAmount 
+          } 
+        },
+        { new: true }
+      );
+
+      if (!buyer) return next(new AppError('Refund failed.', 500));
 
       if (transaction.listing) {
         await Listing.findByIdAndUpdate(transaction.listing, { status: 'active' });

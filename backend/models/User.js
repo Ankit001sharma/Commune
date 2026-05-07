@@ -161,8 +161,6 @@ userSchema.virtual('fullName').get(function () {
   return `${this.firstName} ${this.lastName}`;
 });
 
-userSchema.index({ email: 1 });
-userSchema.index({ rollNumber: 1 });
 userSchema.index({ college: 1 });
 userSchema.index({ _id: 1, 'savedItems.item': 1, 'savedItems.itemType': 1 });
 

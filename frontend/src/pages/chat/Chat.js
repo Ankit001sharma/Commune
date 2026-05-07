@@ -13,9 +13,7 @@ const Chat = () => {
   const { id: activeId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const {
-    markMessageNotificationsByTargetRead,
-  } = useNotifications();
+  const { refreshNotifications } = useNotifications();
 
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
@@ -94,6 +92,7 @@ const Chat = () => {
       setMessages([]);
       return;
     }
+    setMessages([]);
 
     if (!conversations.length) return;
 
@@ -111,21 +110,22 @@ const Chat = () => {
         const { data } = await chatAPI.getConversation(activeId);
 
         setActiveConversation(data.data);
-        setMessages(data.data.messages || []);
+        setMessages((prev) => {
+
+          const existingIds = new Set(
+            prev.map((m) => m._id)
+          );
+
+          const incoming = (data.data.messages || []).filter(
+            (m) => !existingIds.has(m._id)
+          );
+
+          return [...prev, ...incoming];
+        });
 
         setConversations((prev) =>
           prev.map((conv) =>
             conv._id === activeId ? { ...conv, unreadCount: 0 } : conv
-          )
-        );
-
-        const otherParticipantIds = (data.data.participants || [])
-          .map((p) => (typeof p === 'string' ? p : p._id))
-          .filter((id) => id !== user?._id);
-
-        Promise.all(
-          otherParticipantIds.map((id) =>
-            markMessageNotificationsByTargetRead(id)
           )
         );
 
@@ -135,6 +135,8 @@ const Chat = () => {
         socketService.joinConversation(activeId);
         socketService.markAsRead(activeId);
 
+        await refreshNotifications();
+
       } catch (err) {
         console.error('Failed to fetch conversation:', err);
       }
@@ -142,7 +144,7 @@ const Chat = () => {
 
     fetchConversation();
 
-  }, [activeId, user?._id, markMessageNotificationsByTargetRead]); // ✅ FIXED
+  }, [activeId, user?._id]); // ✅ FIXED
 
 
 
@@ -267,8 +269,18 @@ const Chat = () => {
   };
 
   const getOtherParticipant = (conv) => {
+
     if (!conv?.participants) return null;
-    return conv.participants.find((p) => (typeof p === 'string' ? p : p._id) !== user?._id);
+
+    return conv.participants.find((p) => {
+
+      const participantId =
+        typeof p === 'string'
+          ? p
+          : p?._id?.toString();
+
+      return participantId !== user?._id?.toString();
+    });
   };
 
   const getInitials = (u) => {
@@ -442,7 +454,13 @@ const Chat = () => {
                 </div>
               ) : (
                 messages.map((msg, i) => {
-                  const isMine = (typeof msg.sender === 'string' ? msg.sender : msg.sender?._id) === user?._id;
+                  const senderId =
+                    typeof msg.sender === 'string'
+                      ? msg.sender
+                      : msg.sender?._id?.toString();
+
+                  const isMine =
+                    senderId === user?._id?.toString();
                   return (
                     <div key={msg._id || i} className={`chat-message ${isMine ? 'sent' : 'received'}`}>
                       <p>{msg.content}</p>

@@ -6,14 +6,30 @@ import { toast } from '../ui/Toast';
 import AppImage from "../common/AppImage";
 import { resolveImageUrl } from '../../utils/image';
 
+const isValidObjectId = (value) => (
+  /^[a-fA-F0-9]{24}$/.test(`${value || ''}`)
+);
+
 const ListingCard = ({ listing }) => {
   const { isAuthenticated, toggleSavedItem, isItemSaved } = useAuth();
   const navigate = useNavigate();
+
+  const isDeleted = Boolean(
+    listing?.deleted ||
+    listing?.isDeleted ||
+    listing?.status === 'deleted'
+  );
+
+  const canNavigate = isValidObjectId(listing?._id) && !isDeleted;
 
   const isFavorited = isItemSaved(listing._id, 'listing');
 
   const handleFavorite = async (e) => {
     e.stopPropagation();
+    if (!isValidObjectId(listing?._id)) {
+      toast.error('This listing is no longer available');
+      return;
+    }
     if (!isAuthenticated) return navigate('/login');
     try {
       await toggleSavedItem(listing._id, 'listing');
@@ -30,11 +46,20 @@ const ListingCard = ({ listing }) => {
   const imageUrl = resolveImageUrl(listing.images?.[0]?.url);
   const locationLabel = typeof listing.location === 'string' ? listing.location : listing.location?.address;
 
+  const handleOpen = () => {
+    if (!canNavigate) {
+      toast.error('This listing is no longer available');
+      return;
+    }
+    navigate(`/marketplace/${listing._id}`);
+  };
+
   return (
     <div
       className="card"
-      onClick={() => navigate(`/marketplace/${listing._id}`)}
-      style={{ cursor: 'pointer' }}
+      onClick={handleOpen}
+      style={{ cursor: canNavigate ? 'pointer' : 'not-allowed' }}
+      aria-disabled={!canNavigate}
     >
       {/* 🔥 IMAGE FIX (GLOBAL) */}
       {imageUrl ? (

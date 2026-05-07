@@ -3,6 +3,7 @@ const Notification = require('../models/Notification');
 const AppError = require('../utils/AppError');
 const { sendResponse, sendPaginatedResponse } = require('../utils/response');
 const QueryBuilder = require('../utils/QueryBuilder');
+const { normalizeFilePath } = require('../utils/file');
 const { emitNotificationToUser } = require('../services/socketService');
 
 exports.createPost = async (req, res, next) => {
@@ -16,7 +17,7 @@ exports.createPost = async (req, res, next) => {
 
     if (req.files && req.files.length > 0) {
       postData.images = req.files.map((file) => ({
-        url: file.path,
+        url: normalizeFilePath(file.path),
       }));
     }
 
@@ -141,19 +142,38 @@ exports.addComment = async (req, res, next) => {
 
     if (post.author.toString() !== req.user._id.toString()) {
       const senderName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'Someone';
-      const notification = await Notification.create({
-        user: post.author,
-        type: 'community_interaction',
-        sender: req.user._id,
-        senderName,
-        targetId: post._id.toString(),
-        text: `User ${senderName} commented on your post`,
-        metadata: {
-          action: 'commented',
-          postId: post._id.toString(),
-          postTitle: post.title,
-        },
-      });
+      // check existing unread notification
+      let existingNotification =
+        await Notification.findOne({
+          user: post.author,
+          type: 'community_interaction',
+          sender: req.user._id,
+          targetId: post._id.toString(),
+          isRead: false,
+        });
+
+      let notification;
+
+      if (existingNotification) {
+
+        notification = existingNotification;
+
+      } else {
+
+        notification = await Notification.create({
+          user: post.author,
+          type: 'community_interaction',
+          sender: req.user._id,
+          senderName,
+          targetId: post._id.toString(),
+          text: `User ${senderName} commented on your post`,
+          metadata: {
+            action: 'commented',
+            postId: post._id.toString(),
+            postTitle: post.title,
+          },
+        });
+      }
 
       emitNotificationToUser(post.author.toString(), notification);
     }
@@ -182,7 +202,26 @@ exports.toggleLike = async (req, res, next) => {
 
     if (index === -1 && post.author.toString() !== req.user._id.toString()) {
       const senderName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'Someone';
-      const notification = await Notification.create({
+
+      // check existing unread notification
+    let existingNotification =
+      await Notification.findOne({
+        user: post.author,
+        type: 'community_interaction',
+        sender: req.user._id,
+        targetId: post._id.toString(),
+        isRead: false,
+      });
+
+    let notification;
+
+    if (existingNotification) {
+
+      notification = existingNotification;
+
+    } else {
+
+      notification = await Notification.create({
         user: post.author,
         type: 'community_interaction',
         sender: req.user._id,
@@ -195,6 +234,8 @@ exports.toggleLike = async (req, res, next) => {
           postTitle: post.title,
         },
       });
+    }
+
 
       emitNotificationToUser(post.author.toString(), notification);
     }

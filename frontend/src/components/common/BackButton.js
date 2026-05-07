@@ -6,7 +6,12 @@ const BackButton = ({ fallback = '/' }) => {
   const navigate = useNavigate();
 
   const goBack = () => {
-    if (window.history.length > 1) navigate(-1);
+    const canGoBack =
+      typeof window !== 'undefined' &&
+      window.history &&
+      window.history.length > 1;
+
+    if (canGoBack) navigate(-1);
     else navigate(fallback);
   };
 

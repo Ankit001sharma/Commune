@@ -7,7 +7,6 @@ const listingSchema = new mongoose.Schema(
       required: [true, 'Title is required'],
       trim: true,
       maxlength: 120,
-      index: 'text',
     },
     description: {
       type: String,

@@ -11,7 +11,7 @@ console.log('Auth routes loaded');
 router.post('/register', validateRegister, authController.register);
 router.post('/login', validateLogin, authController.login);
 router.post('/refresh-token', authController.refreshToken);
-router.post('/send-otp', sendOtp);
+router.post('/send-otp', validateRegister, sendOtp);
 router.post('/verify-otp', verifyOtp);
 router.post('/resend-otp', resendOtp);
 

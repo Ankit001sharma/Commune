@@ -279,17 +279,17 @@ const PostDetail = () => {
                 display: 'flex', gap: 12, padding: 12,
                 borderRadius: 8, background: 'var(--cx-bg)',
               }}>
-                <div className="post-avatar" style={{ flexShrink: 0 }}>{getInitials(c.user)}</div>
+                <div className="post-avatar" style={{ flexShrink: 0 }}>{getInitials(c.author)}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>
-                      {c.user?.firstName} {c.user?.lastName}
+                      {c.author?.firstName} {c.author?.lastName}
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--cx-text-muted)' }}>
                         {timeAgo(c.createdAt)}
                       </span>
-                      {(user?._id === c.user?._id || isOwner) && (
+                      {(user?._id === c.author?._id || isOwner) && (
                         <button
                           className="btn btn-ghost"
                           style={{ padding: '2px 6px', minHeight: 'auto' }}

@@ -2,6 +2,7 @@ const Service = require('../models/Service');
 const AppError = require('../utils/AppError');
 const { sendResponse, sendPaginatedResponse } = require('../utils/response');
 const QueryBuilder = require('../utils/QueryBuilder');
+const { normalizeFilePath } = require('../utils/file');
 
 const CATEGORY_MAP = {
   tutoring: 'tutoring',
@@ -211,7 +212,7 @@ exports.updateService = async (req, res, next) => {
 
     if (req.files && req.files.length > 0) {
       const newImages = req.files.map((file) => ({
-        url: file.path,
+        url: normalizeFilePath(file.path),
       }));
       updateData.images = [...(service.images || []), ...newImages];
     }

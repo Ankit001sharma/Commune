@@ -10,26 +10,26 @@ const Notifications = () => {
   const {
     notifications,
     loading,
-    markAllNonMessageAsRead,
     markNotificationAsRead,
     refreshNotifications,
   } = useNotifications();
 
+  const shouldDebugNotifications = () => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage?.getItem('cx_debug_notifications') === 'true';
+  };
+
   useEffect(() => {
-    const markSeen = async () => {
-      if (!userId) return;
 
-      try {
-        await markAllNonMessageAsRead();
-        await refreshNotifications();
-      } catch (error) {
-        // Prevent uncaught runtime errors from crashing the UI.
-        console.error('Failed to mark notifications as seen:', error);
-      }
-    };
+    if (!userId) return;
 
-    markSeen();
-  }, [markAllNonMessageAsRead, refreshNotifications, userId]);
+    if (shouldDebugNotifications()) {
+      console.debug('[notifications] page refresh triggered', { userId });
+    }
+
+    refreshNotifications();
+
+  }, [userId, refreshNotifications]);
 
   return (
     <div style={{ padding: '24px' }}>

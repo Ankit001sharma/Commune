@@ -13,6 +13,10 @@ import { resolveImageUrl } from '../../utils/image';
 import LiveTrackingMap from '../../components/location/LiveTrackingMap';
 import BackButton from '../../components/common/BackButton';
 
+const isValidObjectId = (value) => (
+  /^[a-fA-F0-9]{24}$/.test(`${value || ''}`)
+);
+
 const ListingDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -20,23 +24,73 @@ const ListingDetail = () => {
 
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    const fetchListing = async () => {
-      try {
-        const { data } = await listingAPI.getById(id);
-        setListing(data.data);
-      } catch (err) {
-        toast.error('Listing not found');
-        navigate('/marketplace');
-      } finally {
+    let isActive = true;
+    const listingId = `${id || ''}`.trim();
+
+    setLoading(true);
+    setError(null);
+    setListing(null);
+
+    if (!isValidObjectId(listingId)) {
+      if (isActive) {
+        setError({ type: 'invalid_id' });
         setLoading(false);
       }
+      return () => {
+        isActive = false;
+      };
+    }
+
+    const fetchListing = async () => {
+      try {
+        const { data } = await listingAPI.getById(listingId);
+        const payload = data?.data;
+
+        if (!payload || typeof payload !== 'object') {
+          if (isActive) {
+            setError({ type: 'failed' });
+          }
+          return;
+        }
+
+        if (payload?.deleted || payload?.isDeleted) {
+          if (isActive) {
+            setError({ type: 'deleted' });
+          }
+          return;
+        }
+
+        if (isActive) {
+          setListing(payload);
+        }
+      } catch (err) {
+        if (!isActive) return;
+
+        if (err?.response?.status === 404) {
+          setError({ type: 'not_found' });
+          return;
+        }
+
+        setError({ type: 'failed' });
+        toast.error('Failed to load listing');
+      } finally {
+        if (isActive) {
+          setLoading(false);
+        }
+      }
     };
+
     fetchListing();
-  }, [id, navigate]);
+
+    return () => {
+      isActive = false;
+    };
+  }, [id]);
 
   const isFavorited = listing ? isItemSaved(listing._id, 'listing') : false;
 
@@ -105,7 +159,75 @@ const ListingDetail = () => {
     );
   }
 
-  if (!listing) return null;
+  if (error) {
+    const errorTitle =
+      error.type === 'invalid_id'
+        ? 'Invalid listing link'
+        : error.type === 'deleted'
+          ? 'This listing no longer exists'
+          : error.type === 'not_found'
+            ? 'Listing not found'
+            : 'Failed to load listing';
+
+    const errorMessage =
+      error.type === 'invalid_id'
+        ? 'The link to this listing appears to be invalid.'
+        : error.type === 'deleted'
+          ? 'The item may have been deleted by the owner.'
+          : error.type === 'not_found'
+            ? 'This listing may have been removed or is no longer available.'
+            : 'Something went wrong while loading this item.';
+
+    return (
+      <div className="page-container">
+        <BackButton fallback="/marketplace" />
+
+        <div
+          style={{
+            padding: '80px 20px',
+            textAlign: 'center',
+          }}
+        >
+          <h2>{errorTitle}</h2>
+
+          <p
+            style={{
+              marginTop: 12,
+              opacity: 0.7,
+            }}
+          >
+            {errorMessage}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!listing) {
+    return (
+      <div className="page-container">
+        <BackButton fallback="/marketplace" />
+
+        <div
+          style={{
+            padding: '80px 20px',
+            textAlign: 'center',
+          }}
+        >
+          <h2>Failed to load listing</h2>
+
+          <p
+            style={{
+              marginTop: 12,
+              opacity: 0.7,
+            }}
+          >
+            Something went wrong while loading this item.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const images = listing.images || [];
   const locationLabel = typeof listing.location === 'string' ? listing.location : listing.location?.address;
@@ -180,7 +302,7 @@ const ListingDetail = () => {
             {locationLabel && <span><MapPinIcon size={16} /> {locationLabel}</span>}
           </div>
 
-          <LiveTrackingMap location={listing.location} title={`${listing.title} tracking`} />
+          {/*<LiveTrackingMap location={listing.location} title={`${listing.title} tracking`} /> */}
 
           <div className="detail-section">
             <h3>Description</h3>

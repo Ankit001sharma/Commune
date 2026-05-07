@@ -1,16 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { aiAPI } from '../../services/api';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { aiAPI, postAPI } from '../../services/api';
 import ListingCard from '../../components/cards/ListingCard';
 import ServiceCard from '../../components/cards/ServiceCard';
-import { SearchIcon, ZapIcon, PackageIcon, BriefcaseIcon } from '../../components/Icons';
+import PostCard from '../../components/cards/PostCard';
+import { SearchIcon, ZapIcon, PackageIcon, BriefcaseIcon, UsersIcon } from '../../components/Icons';
+import { useAuth } from '../../context/AuthContext';
+import { toast } from '../../components/ui/Toast';
 
 const AISearch = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
 
   const [query, setQuery] = useState(searchParams.get('q') || '');
   const [type, setType] = useState(searchParams.get('type') || 'all');
-  const [results, setResults] = useState({ listings: [], services: [] });
+  const [results, setResults] = useState({ listings: [], services: [], posts: [] });
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [recommendations, setRecommendations] = useState({ listings: [], services: [] });
@@ -52,6 +57,7 @@ const AISearch = () => {
       setResults({
         listings: data.data?.listings || [],
         services: data.data?.services || [],
+        posts: data.data?.posts || [],
       });
     } catch (err) {
       console.error('Search failed:', err);
@@ -67,7 +73,20 @@ const AISearch = () => {
     performSearch(query.trim(), type);
   };
 
-  const totalResults = results.listings.length + results.services.length;
+  const handleLikePost = async (postId) => {
+    if (!isAuthenticated) return navigate('/login');
+    try {
+      const { data } = await postAPI.toggleLike(postId);
+      setResults((prev) => ({
+        ...prev,
+        posts: prev.posts.map((p) => (p._id === postId ? { ...p, likes: data.data.likes } : p)),
+      }));
+    } catch (err) {
+      toast.error('Failed to like post');
+    }
+  };
+
+  const totalResults = results.listings.length + results.services.length + results.posts.length;
 
   return (
     <div className="page-container">
@@ -76,7 +95,7 @@ const AISearch = () => {
           <ZapIcon size={28} style={{ color: 'var(--cx-primary)' }} />
           <h1 className="page-title" style={{ margin: 0 }}>Smart Search</h1>
         </div>
-        <p className="page-subtitle">Search using natural language across marketplace and services</p>
+        <p className="page-subtitle">Search using natural language across marketplace, services, and community</p>
       </div>
 
       {/* Search Form */}
@@ -87,7 +106,7 @@ const AISearch = () => {
             <input
               type="text"
               className="search-input"
-              placeholder='Try "cheap textbooks for engineering" or "someone to help with web development"'
+              placeholder='Try "cheap textbooks", "tutoring help", or "lost keys"'
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               style={{ fontSize: '1rem', padding: '14px 14px 14px 44px' }}
@@ -101,6 +120,7 @@ const AISearch = () => {
           <button type="button" className={`tab ${type === 'all' ? 'active' : ''}`} onClick={() => setType('all')}>All</button>
           <button type="button" className={`tab ${type === 'listing' ? 'active' : ''}`} onClick={() => setType('listing')}>Items</button>
           <button type="button" className={`tab ${type === 'service' ? 'active' : ''}`} onClick={() => setType('service')}>Services</button>
+          <button type="button" className={`tab ${type === 'post' ? 'active' : ''}`} onClick={() => setType('post')}>Community</button>
         </div>
       </form>
 
@@ -141,13 +161,26 @@ const AISearch = () => {
               )}
 
               {results.services.length > 0 && (type === 'all' || type === 'service') && (
-                <div>
+                <div style={{ marginBottom: 32 }}>
                   <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <BriefcaseIcon size={20} /> Services ({results.services.length})
                   </h3>
                   <div className="card-grid">
                     {results.services.map((service) => (
                       <ServiceCard key={service._id} service={service} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {results.posts.length > 0 && (type === 'all' || type === 'post') && (
+                <div>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <UsersIcon size={20} /> Community Posts ({results.posts.length})
+                  </h3>
+                  <div className="card-grid">
+                    {results.posts.map((post) => (
+                      <PostCard key={post._id} post={post} onLike={handleLikePost} />
                     ))}
                   </div>
                 </div>

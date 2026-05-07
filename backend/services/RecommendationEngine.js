@@ -6,6 +6,7 @@
 
 const Listing = require('../models/Listing');
 const Service = require('../models/Service');
+const Post = require('../models/Post');
 
 class RecommendationEngine {
   static buildTagFrequency(savedItems = []) {
@@ -120,46 +121,109 @@ class RecommendationEngine {
   }
 
   /**
-   * Natural language search across listings and services
+   * Natural language search across listings, services and community posts
    */
   static async naturalLanguageSearch(queryText, type = 'all', limit = 20) {
-    const keywords = queryText
+    const trimmedQuery = queryText.trim();
+    if (!trimmedQuery) return { listings: [], services: [], posts: [] };
+
+    const keywords = trimmedQuery
       .toLowerCase()
       .replace(/[^\w\s]/g, '')
       .split(/\s+/)
       .filter((w) => w.length > 2);
 
     const searchRegex = keywords.map((k) => new RegExp(k, 'i'));
-    const results = { listings: [], services: [] };
+    const results = { listings: [], services: [], posts: [] };
 
-    if (type === 'all' || type === 'listings') {
-      results.listings = await Listing.find({
-        status: 'active',
-        $or: [
-          { title: { $in: searchRegex } },
-          { description: { $in: searchRegex } },
-          { tags: { $in: keywords } },
-          { category: { $in: keywords } },
-        ],
-      })
-        .sort({ views: -1 })
-        .limit(limit)
-        .populate('seller', 'firstName lastName avatar');
+    // Use $text search if possible, with regex fallback for partial matches
+    const textQuery = { $text: { $search: trimmedQuery } };
+    const regexQuery = keywords.length > 0 ? {
+      $or: [
+        { title: { $in: searchRegex } },
+        { description: { $in: searchRegex } },
+        { content: { $in: searchRegex } }, // For posts
+        { tags: { $in: keywords } },
+        { category: { $in: keywords } },
+        { type: { $in: keywords } }, // For posts
+      ],
+    } : null;
+
+    if (type === 'all' || type === 'listing' || type === 'listings') {
+      try {
+        // Try text search first for better relevance
+        results.listings = await Listing.find({ status: 'active', ...textQuery })
+          .select({ score: { $meta: 'textScore' } })
+          .sort({ score: { $meta: 'textScore' } })
+          .limit(limit)
+          .populate('seller', 'firstName lastName avatar');
+        
+        // If no results, fallback to regex
+        if (results.listings.length === 0 && regexQuery) {
+          results.listings = await Listing.find({ status: 'active', ...regexQuery })
+            .sort({ views: -1 })
+            .limit(limit)
+            .populate('seller', 'firstName lastName avatar');
+        }
+      } catch (err) {
+        console.error('Listing search error:', err.message);
+        if (regexQuery) {
+          results.listings = await Listing.find({ status: 'active', ...regexQuery })
+            .sort({ views: -1 })
+            .limit(limit)
+            .populate('seller', 'firstName lastName avatar');
+        }
+      }
     }
 
-    if (type === 'all' || type === 'services') {
-      results.services = await Service.find({
-        status: 'active',
-        $or: [
-          { title: { $in: searchRegex } },
-          { description: { $in: searchRegex } },
-          { tags: { $in: keywords } },
-          { category: { $in: keywords } },
-        ],
-      })
-        .sort({ 'rating.average': -1 })
-        .limit(limit)
-        .populate('provider', 'firstName lastName avatar');
+    if (type === 'all' || type === 'service' || type === 'services') {
+      try {
+        results.services = await Service.find({ status: 'active', ...textQuery })
+          .select({ score: { $meta: 'textScore' } })
+          .sort({ score: { $meta: 'textScore' } })
+          .limit(limit)
+          .populate('provider', 'firstName lastName avatar');
+
+        if (results.services.length === 0 && regexQuery) {
+          results.services = await Service.find({ status: 'active', ...regexQuery })
+            .sort({ 'rating.average': -1 })
+            .limit(limit)
+            .populate('provider', 'firstName lastName avatar');
+        }
+      } catch (err) {
+        console.error('Service search error:', err.message);
+        if (regexQuery) {
+          results.services = await Service.find({ status: 'active', ...regexQuery })
+            .sort({ 'rating.average': -1 })
+            .limit(limit)
+            .populate('provider', 'firstName lastName avatar');
+        }
+      }
+    }
+
+    if (type === 'all' || type === 'post' || type === 'posts' || type === 'community') {
+      try {
+        results.posts = await Post.find({ status: 'active', ...textQuery })
+          .select({ score: { $meta: 'textScore' } })
+          .sort({ score: { $meta: 'textScore' } })
+          .limit(limit)
+          .populate('author', 'firstName lastName avatar');
+
+        if (results.posts.length === 0 && regexQuery) {
+          results.posts = await Post.find({ status: 'active', ...regexQuery })
+            .sort({ views: -1, createdAt: -1 })
+            .limit(limit)
+            .populate('author', 'firstName lastName avatar');
+        }
+      } catch (err) {
+        console.error('Post search error:', err.message);
+        if (regexQuery) {
+          results.posts = await Post.find({ status: 'active', ...regexQuery })
+            .sort({ views: -1, createdAt: -1 })
+            .limit(limit)
+            .populate('author', 'firstName lastName avatar');
+        }
+      }
     }
 
     return results;

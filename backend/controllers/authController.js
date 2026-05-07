@@ -2,53 +2,8 @@ const User = require('../models/User');
 const AppError = require('../utils/AppError');
 const { sendResponse } = require('../utils/response');
 const { sendOtpEmail, sendWelcomeEmail } = require('../services/emailService');
-const { validateRollAndDepartment, normalizeDepartment } = require('../utils/rollValidation');
 
 const OTP_TTL_MS = 60 * 1000;
-
-const hasSpecialCharacter = (value) => /[^A-Za-z0-9]/.test(value || '');
-const PHONE_REGEX = /^[0-9]{10}$/;
-
-const normalizeSignupPayload = (body = {}) => ({
-  firstName: `${body.firstName || ''}`.trim(),
-  lastName: `${body.lastName || ''}`.trim(),
-  email: `${body.email || ''}`.trim().toLowerCase(),
-  rollNumber: `${body.rollNumber || ''}`.trim().toUpperCase(),
-  department: normalizeDepartment(`${body.department || ''}`.trim()),
-  password: `${body.password || ''}`,
-  phone: `${body.phone || ''}`.trim(),
-  year: body.year,
-});
-
-const validateSignupPayload = (payload) => {
-  const errors = [];
-
-  if (!payload.firstName || payload.firstName.length < 2) errors.push('First name must be at least 2 characters.');
-  if (!payload.lastName || payload.lastName.length < 2) errors.push('Last name must be at least 2 characters.');
-  if (!payload.email || !/^\S+@\S+\.\S+$/.test(payload.email)) errors.push('Valid email is required.');
-  if (!payload.password || payload.password.length < 8) errors.push('Password must be at least 8 characters.');
-  if (!hasSpecialCharacter(payload.password)) errors.push('Password must include at least one special character.');
-  if (!payload.phone) errors.push('Phone is required.');
-  if (payload.phone && !PHONE_REGEX.test(payload.phone)) errors.push('Phone number must be exactly 10 digits.');
-  if (![1, 2, 3, 4].includes(Number(payload.year || 1))) errors.push('Year must be between 1st Year and 4th Year.');
-
-  const rollValidation = validateRollAndDepartment(payload.rollNumber, payload.department);
-  if (!rollValidation.isValid) {
-    errors.push(rollValidation.message);
-  }
-
-  if (errors.length > 0) {
-    return {
-      isValid: false,
-      errors,
-    };
-  }
-
-  return {
-    isValid: true,
-    expectedDepartment: rollValidation.expectedDepartment,
-  };
-};
 
 const generateOtp = () => `${Math.floor(100000 + Math.random() * 900000)}`;
 
@@ -56,14 +11,10 @@ exports.sendOtp = async (req, res, next) => {
   try {
     console.log('sendOtp API hit');
 
-    const payload = normalizeSignupPayload(req.body);
-    const validation = validateSignupPayload(payload);
-    if (!validation.isValid) {
-      return next(new AppError(validation.errors.join(' '), 400));
-    }
+    const { firstName, lastName, email, rollNumber, password, department, phone, year } = req.body;
 
-    const byEmail = await User.findOne({ email: payload.email }).select('+otp +otpExpiry +otpResendCount +password');
-    const byRoll = await User.findOne({ rollNumber: payload.rollNumber }).select('+otp +otpExpiry +otpResendCount +password');
+    const byEmail = await User.findOne({ email }).select('+otp +otpExpiry +otpResendCount +password');
+    const byRoll = await User.findOne({ rollNumber }).select('+otp +otpExpiry +otpResendCount +password');
 
     if ((byEmail && byEmail.isVerified) || (byRoll && byRoll.isVerified)) {
       return next(new AppError('User with this email or roll number already exists.', 400));
@@ -77,26 +28,26 @@ exports.sendOtp = async (req, res, next) => {
     const otpExpiry = new Date(Date.now() + OTP_TTL_MS);
 
     const user = byEmail || byRoll || new User();
-    user.firstName = payload.firstName;
-    user.lastName = payload.lastName;
-    user.email = payload.email;
-    user.rollNumber = payload.rollNumber;
-    user.password = payload.password;
-    user.department = validation.expectedDepartment;
-    user.phone = payload.phone;
-    user.year = Number(payload.year) || 1;
+    user.firstName = firstName;
+    user.lastName = lastName;
+    user.email = email;
+    user.rollNumber = rollNumber;
+    user.password = password;
+    user.department = department;
+    user.phone = phone;
+    user.year = Number(year) || 1;
     user.isVerified = false;
     user.otp = otp;
     user.otpExpiry = otpExpiry;
     user.otpResendCount = 0;
 
     await user.save();
-    await sendOtpEmail({ to: payload.email, firstName: payload.firstName, otp });
+    await sendOtpEmail({ to: email, firstName: firstName, otp });
 
     sendResponse(
       res,
       200,
-      { email: payload.email, expiresInSeconds: 60 },
+      { email: email, expiresInSeconds: 60 },
       'OTP sent successfully'
     );
   } catch (error) {

@@ -112,10 +112,23 @@ const SavedItems = () => {
           )}
 
           {item.location && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10 }}>
-              <MapPinIcon size={14} /> {item.location}
-            </div>
-          )}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                marginTop: 10,
+              }}
+            >
+    <MapPinIcon size={14} />
+
+    <span>
+      {typeof item.location === 'string'
+        ? item.location
+        : item.location?.address || 'No location'}
+    </span>
+  </div>
+)}
 
           {tags.length > 0 && (
             <div className="detail-tags" style={{ marginTop: 10 }}>

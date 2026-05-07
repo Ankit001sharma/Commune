@@ -2,6 +2,7 @@ const Listing = require('../models/Listing');
 const AppError = require('../utils/AppError');
 const { sendResponse, sendPaginatedResponse } = require('../utils/response');
 const QueryBuilder = require('../utils/QueryBuilder');
+const { normalizeFilePath } = require('../utils/file');
 
 const mongoose = require ("mongoose");
 const FREE_UPLOAD_LIMIT = 2;
@@ -172,7 +173,7 @@ exports.updateListing = async (req, res, next) => {
 
     if (req.files && req.files.length > 0) {
       const newImages = req.files.map((file) => ({
-        url: file.path,
+        url: normalizeFilePath(file.path),
       }));
       updateData.images = [...(listing.images || []), ...newImages];
     }

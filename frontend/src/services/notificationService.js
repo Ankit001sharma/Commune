@@ -7,6 +7,11 @@ const normalizeScope = (scope) => {
   return VALID_SCOPES.has(normalized) ? normalized : 'non-message';
 };
 
+const shouldDebugNotifications = () => {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage?.getItem('cx_debug_notifications') === 'true';
+};
+
 const notificationService = {
   async getNotifications({ scope = 'non-message', unreadOnly = false, userId } = {}) {
     if (!userId) return [];
@@ -21,9 +26,16 @@ const notificationService = {
     return data?.data || [];
   },
 
-  async markAsRead(notificationId, userId) {
-    if (!notificationId || !userId) return;
-    await api.put(`/notifications/${notificationId}/read`);
+  async markAsRead(notificationId) {
+    if (!notificationId) return;
+    if (shouldDebugNotifications()) {
+      console.debug('[notifications] markAsRead request', { notificationId });
+    }
+    const response = await api.put(`/notifications/${notificationId}/read`);
+    if (shouldDebugNotifications()) {
+      console.debug('[notifications] markAsRead response', { notificationId, status: response?.status });
+    }
+    return response?.data;
   },
 
   async markAllAsRead(scope = 'non-message', userId) {

@@ -1,8 +1,8 @@
 const Conversation = require('../models/Conversation');
 const AppError = require('../utils/AppError');
 const { sendResponse } = require('../utils/response');
-const Notification = require('../models/Notification');
-const { emitNotificationToUser, emitToConversation } = require('../services/socketService');
+const ChatService = require('../services/ChatService');
+const { emitNotificationToUser, emitToConversation, onlineUsers } = require('../services/socketService');
 
 // 🔹 GET ALL CONVERSATIONS
 exports.getConversations = async (req, res, next) => {
@@ -40,7 +40,10 @@ exports.getConversations = async (req, res, next) => {
 // 🔹 GET SINGLE CONVERSATION
 exports.getConversation = async (req, res, next) => {
   try {
-    const conversation = await Conversation.findById(req.params.id)
+    const conversationId = req.params.id;
+    const userId = req.user._id;
+
+    const conversation = await Conversation.findById(conversationId)
       .populate('participants', 'firstName lastName avatar lastActive')
       .populate('relatedListing', 'title images price seller')
       .populate('relatedService', 'title pricing provider')
@@ -49,36 +52,14 @@ exports.getConversation = async (req, res, next) => {
     if (!conversation) return next(new AppError('Conversation not found.', 404));
 
     const isParticipant = conversation.participants.some(
-      (p) => p._id.toString() === req.user._id.toString()
+      (p) => p._id.toString() === userId.toString()
     );
     if (!isParticipant) return next(new AppError('Access denied.', 403));
 
-    // mark messages read
-    conversation.messages.forEach((msg) => {
-      if (msg.sender._id.toString() !== req.user._id.toString()) {
-        const alreadyRead = msg.readBy.some(
-          (r) => r.user.toString() === req.user._id.toString()
-        );
-        if (!alreadyRead) {
-          msg.readBy.push({ user: req.user._id, readAt: new Date() });
-        }
-      }
-    });
-
-    await conversation.save();
-
-    await Notification.updateMany(
-      {
-        user: req.user._id,
-        type: 'message',
-        conversationId: conversation._id,
-        isRead: false,
-      },
-      { isRead: true }
-    );
+    // Mark as read using ChatService
+    await ChatService.markAsRead(conversationId, userId);
 
     sendResponse(res, 200, conversation);
-
   } catch (error) {
     next(error);
   }
@@ -129,64 +110,20 @@ exports.createOrGetConversation = async (req, res, next) => {
 exports.sendMessage = async (req, res, next) => {
   try {
     const { content, messageType = 'text', metadata } = req.body;
+    const conversationId = req.params.id;
 
     if (!content || content.trim().length === 0) {
       return next(new AppError('Message content is required.', 400));
     }
 
-    const conversation = await Conversation.findById(req.params.id);
-    if (!conversation) return next(new AppError('Conversation not found.', 404));
-
-    const isParticipant = conversation.participants.some(
-      (p) => p.toString() === req.user._id.toString()
-    );
-
-    if (!isParticipant) return next(new AppError('Access denied.', 403));
-
-    const message = {
-      sender: req.user._id,
-      content: content.trim(),
+    const { newMessage, notifications, recipients } = await ChatService.sendMessage({
+      conversationId,
+      senderId: req.user._id,
+      senderName: req.user.fullName,
+      content,
       messageType,
-      metadata: metadata || {},
-      readBy: [{ user: req.user._id, readAt: new Date() }],
-    };
-
-    conversation.messages.push(message);
-
-    conversation.lastMessage = {
-      content: content.trim(),
-      sender: req.user._id,
-      createdAt: new Date(),
-    };
-
-    await conversation.save();
-
-    // 🔥 CREATE NOTIFICATIONS
-    const recipients = conversation.participants.filter(
-      (p) => p.toString() !== req.user._id.toString()
-    );
-
-    const senderName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'Someone';
-
-    for (const userId of recipients) {
-      const notification = await Notification.create({
-        user: userId,
-        type: 'message',
-        sender: req.user._id,
-        senderName,
-        targetId: req.user._id.toString(),
-        text: `User ${senderName} sent you a message`,
-        conversationId: conversation._id,
-        metadata: {
-          senderId: req.user._id.toString(),
-          messagePreview: content.trim().slice(0, 120),
-        },
-      });
-
-      emitNotificationToUser(userId.toString(), notification);
-    }
-
-    const newMessage = conversation.messages[conversation.messages.length - 1];
+      metadata,
+    });
 
     const messageData = {
       _id: newMessage._id,
@@ -200,13 +137,20 @@ exports.sendMessage = async (req, res, next) => {
       messageType: newMessage.messageType,
       metadata: newMessage.metadata,
       createdAt: newMessage.createdAt,
-      conversationId: conversation._id.toString(),
+      conversationId,
     };
 
-    emitToConversation(conversation._id.toString(), 'message:new', messageData);
+    // Emit to conversation room
+    emitToConversation(conversationId, 'message:new', messageData);
+
+    // Emit notifications
+    notifications.forEach((notification, index) => {
+      const pid = recipients[index].toString();
+      
+      emitNotificationToUser(pid, notification);
+    });
 
     sendResponse(res, 201, newMessage, 'Message sent');
-
   } catch (error) {
     next(error);
   }

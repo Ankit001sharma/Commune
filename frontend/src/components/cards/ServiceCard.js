@@ -44,7 +44,9 @@ const ServiceCard = ({ service }) => {
           </span>
         </div>
         <div className="card-title">{service.title}</div>
-        <div className="card-description">{service.description}</div>
+        <div className="card-description">
+          {service.description?.length > 80 ? `${service.description.substring(0, 80)}...` : service.description}
+        </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
           <span className="card-price">{getPriceDisplay(service.pricing)}</span>
