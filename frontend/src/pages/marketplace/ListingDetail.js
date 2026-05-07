@@ -161,6 +161,7 @@ const ListingDetail = () => {
   const [trackingStatus, setTrackingStatus] = useState('idle');
   const [trackingError, setTrackingError] = useState(null);
   const [geocodeRetrying, setGeocodeRetrying] = useState(false);
+  const [copyStatus, setCopyStatus] = useState(null);
 
   const [buyerLocation, setBuyerLocation] = useState(() => loadBuyerLocation());
   const [buyerStatus, setBuyerStatus] = useState('idle');
@@ -808,6 +809,23 @@ const ListingDetail = () => {
     }
   };
 
+  const handleCopyAddress = async () => {
+    if (!locationLabel) return;
+    try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error('Clipboard unavailable');
+      }
+      await navigator.clipboard.writeText(locationLabel);
+      setCopyStatus('Address copied');
+    } catch (err) {
+      setCopyStatus('Could not copy address');
+    }
+
+    setTimeout(() => {
+      setCopyStatus(null);
+    }, 1800);
+  };
+
   const timeAgo = (dateStr) => {
     const seconds = Math.floor((new Date() - new Date(dateStr)) / 1000);
     if (seconds < 60) return 'Just now';
@@ -984,25 +1002,60 @@ const ListingDetail = () => {
                   <MapPinIcon size={16} />
                   <span>Product Location</span>
                 </div>
-                <div className="text-muted" style={{ marginTop: 6 }}>
-                  {locationLabel || 'Location not available'}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginTop: 6 }}>
+                  <div className="text-muted" style={{ flex: 1 }}>
+                    {locationLabel || 'Location not available'}
+                  </div>
+                  {isManualProductLocation && locationLabel && (
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={handleCopyAddress}
+                        aria-label="Copy address"
+                        title="Copy address"
+                        style={{ padding: 6, minHeight: 'auto', lineHeight: 0 }}
+                      >
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <rect x="9" y="9" width="13" height="13" rx="2" />
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                      </button>
+                      {copyStatus && (
+                        <span
+                          className="text-muted"
+                          style={{
+                            position: 'absolute',
+                            top: -22,
+                            right: 0,
+                            fontSize: '0.75rem',
+                            background: 'var(--cx-bg-elevated)',
+                            border: '1px solid var(--cx-border)',
+                            padding: '2px 6px',
+                            borderRadius: 6,
+                            boxShadow: 'var(--cx-shadow-sm)',
+                          }}
+                        >
+                          {copyStatus === 'Address copied' ? 'Copied' : 'Could not copy'}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {!sellerHasCoords && (
                   <div style={{ marginTop: 8 }}>
                     <div className="text-muted" style={{ fontSize: '0.82rem' }}>
                       {normalizedLocation?.geocodeError || ''}
                     </div>
-                    {isOwner && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        onClick={retryManualGeocode}
-                        disabled={geocodeRetrying}
-                        style={{ marginTop: 6 }}
-                      >
-                        {geocodeRetrying ? 'Retrying...' : 'Retry location lookup'}
-                      </button>
-                    )}
                   </div>
                 )}
               </div>
