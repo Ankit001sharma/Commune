@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
 
 const SplashScreen = ({ children }) => {
-  const [visible, setVisible] = useState(() => !sessionStorage.getItem('cx_splash_seen'));
+  const [visible, setVisible] = useState(true);
 
   useEffect(() => {
     if (!visible) return;
     const timer = setTimeout(() => {
-      sessionStorage.setItem('cx_splash_seen', 'true');
       setVisible(false);
     }, 1600);
     return () => clearTimeout(timer);
