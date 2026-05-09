@@ -29,6 +29,11 @@ module.exports = {
     pass: process.env.SMTP_PASS,
     from: process.env.SMTP_FROM || process.env.SMTP_USER,
   },
+  razorpay: {
+    keyId: process.env.RAZORPAY_KEY_ID,
+    keySecret: process.env.RAZORPAY_KEY_SECRET,
+    currency: process.env.RAZORPAY_CURRENCY || 'INR',
+  },
   groq: {
     apiKey: process.env.GROQ_API_KEY,
     apiKeys: (process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || '')

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { listingAPI, chatAPI } from '../../services/api';
+import { listingAPI, chatAPI, paymentAPI } from '../../services/api';
+import { loadRazorpayScript } from '../../utils/razorpay';
 import { useAuth } from '../../context/AuthContext';
 import {
   HeartIcon, HeartFilledIcon, MapPinIcon, ClockIcon, EyeIcon, TagIcon,
@@ -157,6 +158,7 @@ const ListingDetail = () => {
   const [error, setError] = useState(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [deleting, setDeleting] = useState(false);
+  const [paying, setPaying] = useState(false);
   const [trackingActive, setTrackingActive] = useState(false);
   const [trackingStatus, setTrackingStatus] = useState('idle');
   const [trackingError, setTrackingError] = useState(null);
@@ -768,6 +770,118 @@ const ListingDetail = () => {
     }
   };
 
+  const handleBuyNow = async () => {
+    console.log('[buy-now] click', {
+      listingId: listing?._id,
+      status: listing?.status,
+      price: listing?.price,
+      isAuthenticated,
+      isOwner,
+    });
+
+    if (!isAuthenticated) return navigate('/login');
+    if (!listing?._id) {
+      console.warn('[buy-now] no listing id');
+      return;
+    }
+    if (isOwner) {
+      toast.error('You cannot buy your own listing');
+      return;
+    }
+    if (listing.status && listing.status !== 'available' && listing.status !== 'active') {
+      toast.error(`This listing is ${listing.status}`);
+      return;
+    }
+    if (!Number.isFinite(Number(listing.price)) || Number(listing.price) <= 0) {
+      toast.error('This listing has no payable price');
+      return;
+    }
+
+    setPaying(true);
+    let opened = false;
+    try {
+      console.log('[buy-now] loading razorpay script');
+      const Razorpay = await loadRazorpayScript();
+      console.log('[buy-now] razorpay loaded?', Boolean(Razorpay));
+      if (!Razorpay) {
+        toast.error('Could not load Razorpay. Disable ad-blockers and retry.');
+        return;
+      }
+
+      console.log('[buy-now] requesting order from backend');
+      const { data } = await paymentAPI.createOrder(listing._id);
+      console.log('[buy-now] order response', data);
+      const order = data?.data;
+      if (!order?.orderId || !order?.keyId) {
+        toast.error('Failed to create payment order');
+        return;
+      }
+
+      const options = {
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        order_id: order.orderId,
+        name: 'CommuneX',
+        description: order.listing?.title || listing.title,
+        prefill: {
+          name: order.buyer?.name || `${user?.firstName || ''} ${user?.lastName || ''}`.trim(),
+          email: order.buyer?.email || user?.email || '',
+        },
+        notes: {
+          listingId: listing._id,
+        },
+        theme: { color: '#2563eb' },
+        handler: async (response) => {
+          console.log('[buy-now] checkout success', response);
+          try {
+            await paymentAPI.verify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              listingId: listing._id,
+            });
+            toast.success('Payment successful');
+            setListing((prev) => (prev ? { ...prev, status: 'sold' } : prev));
+            navigate('/transactions');
+          } catch (err) {
+            console.error('[buy-now] verify failed', err);
+            const msg = err?.response?.data?.message || 'Payment verification failed';
+            toast.error(msg);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            console.log('[buy-now] checkout dismissed');
+            setPaying(false);
+          },
+        },
+      };
+
+      console.log('[buy-now] opening razorpay checkout');
+      const rp = new Razorpay(options);
+      rp.on('payment.failed', (resp) => {
+        console.error('[buy-now] payment.failed', resp);
+        const msg = resp?.error?.description || 'Payment failed';
+        toast.error(msg);
+        setPaying(false);
+      });
+      rp.open();
+      opened = true;
+    } catch (err) {
+      console.error('[buy-now] error', err);
+      const status = err?.response?.status;
+      const serverMsg = err?.response?.data?.message;
+      const msg =
+        serverMsg ||
+        err?.message ||
+        'Could not start payment';
+      toast.error(status ? `${status}: ${msg}` : msg);
+    } finally {
+      if (!opened) setPaying(false);
+    }
+  };
+
   const handleContact = async () => {
     if (!isAuthenticated) return navigate('/login');
     try {
@@ -1204,7 +1318,25 @@ const ListingDetail = () => {
               </>
             ) : (
               <>
-                <button className="btn btn-primary" onClick={handleContact}>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleBuyNow}
+                  disabled={
+                    paying ||
+                    listing.status === 'sold' ||
+                    listing.status === 'reserved' ||
+                    !listing.price
+                  }
+                >
+                  {paying
+                    ? 'Processing...'
+                    : listing.status === 'sold'
+                      ? 'Sold'
+                      : listing.status === 'reserved'
+                        ? 'Reserved'
+                        : `Buy Now${listing.price ? ` · ₹${Number(listing.price).toLocaleString()}` : ''}`}
+                </button>
+                <button className="btn btn-secondary" onClick={handleContact}>
                   <MessageCircleIcon size={18} /> Contact Seller
                 </button>
                 <button className={`btn ${isFavorited ? 'btn-secondary' : 'btn-ghost'}`} onClick={handleFavorite}>

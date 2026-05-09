@@ -23,31 +23,14 @@ api.interceptors.request.use(
 );
 
 // Response interceptor – handle token refresh
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      try {
-        const refreshToken = localStorage.getItem('cx_refresh_token');
-        if (refreshToken) {
-          const { data } = await axios.post(`${API_BASE}/auth/refresh-token`, { refreshToken });
-          localStorage.setItem('cx_token', data.data.token);
-          localStorage.setItem('cx_refresh_token', data.data.refreshToken);
-          originalRequest.headers.Authorization = `Bearer ${data.data.token}`;
-          return api(originalRequest);
-        }
-      } catch (_) {
-        localStorage.removeItem('cx_token');
-        localStorage.removeItem('cx_refresh_token');
-        window.location.href = '/login';
-      }
+  api.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
-  }
-);
+  );
 
+  
 // ===== Auth =====
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
@@ -129,6 +112,12 @@ export const transactionAPI = {
 export const tokenAPI = {
   getPricing: () => api.get('/tokens/pricing'),
   purchase: (plan) => api.post('/tokens/purchase', { plan }),
+};
+
+// ===== Payments (Razorpay) =====
+export const paymentAPI = {
+  createOrder: (listingId) => api.post('/payments/orders', { listingId }),
+  verify: (payload) => api.post('/payments/verify', payload),
 };
 
 // ===== AI =====

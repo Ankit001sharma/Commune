@@ -53,8 +53,13 @@ const transactionSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['wallet', 'upi', 'cash', 'bank-transfer'],
+      enum: ['wallet', 'upi', 'cash', 'bank-transfer', 'razorpay'],
       default: 'wallet',
+    },
+    razorpay: {
+      orderId: { type: String, index: true },
+      paymentId: { type: String, index: true },
+      signature: { type: String },
     },
     notes: {
       type: String,
