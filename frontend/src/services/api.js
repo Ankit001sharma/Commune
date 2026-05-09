@@ -130,8 +130,18 @@ export const aiAPI = {
 
 export const adminAPI = {
   getOverview: () => api.get('/admin/overview'),
-  getUsers: () => api.get('/admin/users'),
+  getActivity: () => api.get('/admin/activity'),
+  getUsers: (params) => api.get('/admin/users', { params }),
   updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
+  deleteUser: (id) => api.delete(`/admin/users/${id}`),
+  getListings: () => api.get('/admin/listings'),
+  updateListingStatus: (id, status) => api.put(`/admin/listings/${id}`, { status }),
+  deleteListing: (id) => api.delete(`/admin/listings/${id}`),
+  getServices: () => api.get('/admin/services'),
+  deleteService: (id) => api.delete(`/admin/services/${id}`),
+  getTransactions: () => api.get('/admin/transactions'),
+  getPosts: () => api.get('/admin/posts'),
+  deletePost: (id) => api.delete(`/admin/posts/${id}`),
   sendRecommendationEmails: () => api.post('/admin/recommendation-emails'),
 };
 
