@@ -126,6 +126,14 @@ export const aiAPI = {
   getRecommendationsV2: (params) => api.get('/recommendations', { params }),
   search: (q, type) => api.get('/ai/search', { params: { q, type } }),
   chatbot: (message) => api.post('/ai/chatbot', { message }),
+  listingAssist: (file) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return api.post('/ai/listing-assist', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 45000,
+    });
+  },
 };
 
 export const adminAPI = {

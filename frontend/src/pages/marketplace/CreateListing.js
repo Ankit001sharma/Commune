@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { listingAPI } from '../../services/api';
+import { listingAPI, aiAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { XIcon, PlusIcon } from '../../components/Icons';
+import { XIcon, PlusIcon, ZapIcon, CheckIcon, AlertCircleIcon, TrendingUpIcon } from '../../components/Icons';
 import { toast } from '../../components/ui/Toast';
 import { resolveImageUrl } from '../../utils/image';
 import LocationPicker from '../../components/location/LocationPicker';
@@ -44,6 +44,12 @@ const CreateListing = () => {
   const [previews, setPreviews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(isEdit);
+
+  /* AI assist state */
+  const [aiState, setAiState] = useState('idle'); // idle | running | done | error
+  const [aiResult, setAiResult] = useState(null); // { price: {...}, modelUsed, keywords }
+  const [aiError, setAiError] = useState(null);
+  const aiTriggeredFor = useRef(new Set());
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -95,15 +101,74 @@ const CreateListing = () => {
     }));
   };
 
+  /* ---------------------- AI auto-fill --------------------- */
+  const runAiAssist = async (file, force = false) => {
+    if (!file) return;
+    if (isEdit && !force) return; // only run on new listings unless user re-triggers
+
+    const key = `${file.name}-${file.size}-${file.lastModified}`;
+    if (!force && aiTriggeredFor.current.has(key)) return;
+    aiTriggeredFor.current.add(key);
+
+    setAiState('running');
+    setAiError(null);
+    try {
+      const { data } = await aiAPI.listingAssist(file);
+      const s = data.data || {};
+      setAiResult(s);
+
+      setForm((prev) => ({
+        ...prev,
+        // Don't overwrite manually edited fields unless force-regenerating
+        title: force || !prev.title ? (s.title || prev.title) : prev.title,
+        description: force || !prev.description ? (s.description || prev.description) : prev.description,
+        category: force || !prev.category || prev.category === 'books'
+          ? (s.category || prev.category)
+          : prev.category,
+        condition: force || !prev.condition || prev.condition === 'good'
+          ? (s.condition || prev.condition)
+          : prev.condition,
+        price: force || !prev.price ? String(s.price?.suggested || prev.price || '') : prev.price,
+        tags: force || !prev.tags ? (Array.isArray(s.keywords) ? s.keywords.join(', ') : prev.tags) : prev.tags,
+      }));
+
+      setAiState('done');
+      toast.success('AI filled in title, description and a smart price');
+    } catch (err) {
+      setAiError(err.response?.data?.message || 'AI assist failed. Fill in details manually.');
+      setAiState('error');
+    }
+  };
+
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
     if (files.length + images.length > 5) {
       toast.error('Maximum 5 images allowed');
       return;
     }
+    const isFirstUpload = images.length === 0;
     setImages((prev) => [...prev, ...files]);
     const newPreviews = files.map((file) => URL.createObjectURL(file));
     setPreviews((prev) => [...prev, ...newPreviews]);
+
+    if (isFirstUpload && files[0] && !isEdit) {
+      runAiAssist(files[0], false);
+    }
+  };
+
+  const regenerateAi = () => {
+    if (!images[0]) {
+      toast.error('Upload an image first');
+      return;
+    }
+    runAiAssist(images[0], true);
+  };
+
+  const applySuggestedPrice = () => {
+    const p = aiResult?.price?.suggested;
+    if (!p) return;
+    setForm((prev) => ({ ...prev, price: String(p) }));
+    toast.success(`Price set to ₹${p}`);
   };
 
   const removeImage = (index) => {
@@ -165,20 +230,28 @@ const CreateListing = () => {
     );
   }
 
+  const showAiBanner = !isEdit && (aiState !== 'idle' || aiResult);
+  const priceInfo = aiResult?.price;
+
   return (
     <div className="page-container" style={{ maxWidth: 800, margin: '0 auto' }}>
       <div className="page-header">
         <div>
           <BackButton fallback="/marketplace" />
           <h1 className="page-title">{isEdit ? 'Edit Listing' : 'Post New Item'}</h1>
-          {!isEdit && <p className="page-subtitle">2 uploads are free. After that, 1 product upload uses 1 token worth INR 5.</p>}
+          {!isEdit && (
+            <p className="page-subtitle">
+              Drop a photo and our AI will write the title, description and suggest a price likely to sell.
+              2 uploads are free, then 1 token (₹5) per upload.
+            </p>
+          )}
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="form-card">
         {/* Images */}
         <div className="form-group">
-          <label className="form-label">Images (up to 5)</label>
+          <label className="form-label">Images (up to 5) — first photo powers the AI auto-fill</label>
           <div className="image-upload-grid">
             {previews.map((src, i) => (
               <div key={i} className="image-upload-preview">
@@ -197,6 +270,43 @@ const CreateListing = () => {
             )}
           </div>
         </div>
+
+        {/* AI banner */}
+        {showAiBanner && (
+          <div className={`ai-assist-banner ai-state-${aiState}`}>
+            <div className="ai-assist-icon">
+              <ZapIcon size={20} />
+            </div>
+            <div className="ai-assist-body">
+              {aiState === 'running' && (
+                <>
+                  <strong>AI is analysing your photo…</strong>
+                  <span>Generating title, description, category and a smart price.</span>
+                </>
+              )}
+              {aiState === 'done' && (
+                <>
+                  <strong><CheckIcon size={14} /> AI auto-fill applied</strong>
+                  <span>
+                    Detected category <em>{aiResult?.category}</em>, condition <em>{aiResult?.condition}</em>.
+                    Edit anything below before posting.
+                  </span>
+                </>
+              )}
+              {aiState === 'error' && (
+                <>
+                  <strong><AlertCircleIcon size={14} /> Couldn't auto-fill</strong>
+                  <span>{aiError}</span>
+                </>
+              )}
+            </div>
+            <div className="ai-assist-actions">
+              <button type="button" className="btn btn-outline btn-sm" onClick={regenerateAi} disabled={aiState === 'running'}>
+                {aiState === 'running' ? 'Working…' : 'Regenerate'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Title */}
         <div className="form-group">
@@ -272,6 +382,33 @@ const CreateListing = () => {
             </label>
           </div>
         </div>
+
+        {/* Smart price card */}
+        {priceInfo && priceInfo.suggested > 0 && (
+          <div className="ai-price-card">
+            <div className="ai-price-head">
+              <TrendingUpIcon size={16} />
+              <strong>Smart price suggestion</strong>
+              <span className={`ai-conf ai-conf-${priceInfo.confidence || 'medium'}`}>
+                {priceInfo.confidence} confidence
+              </span>
+            </div>
+            <div className="ai-price-row">
+              <div className="ai-price-main">
+                <span className="ai-price-label">Recommended</span>
+                <strong>₹{priceInfo.suggested}</strong>
+              </div>
+              <div className="ai-price-range">
+                <span className="ai-price-label">Sells in range</span>
+                <strong>₹{priceInfo.min} – ₹{priceInfo.max}</strong>
+              </div>
+              <button type="button" className="btn btn-primary btn-sm" onClick={applySuggestedPrice}>
+                Use this price
+              </button>
+            </div>
+            <p className="ai-price-rationale">{priceInfo.rationale}</p>
+          </div>
+        )}
 
         {/* Location */}
         <div className="form-group">

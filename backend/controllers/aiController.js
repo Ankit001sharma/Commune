@@ -1,5 +1,6 @@
 const RecommendationEngine = require('../services/RecommendationEngine');
 const ChatbotService = require('../services/ChatbotService');
+const ListingAssistService = require('../services/ListingAssistService');
 const { sendResponse } = require('../utils/response');
 const User = require('../models/User');
 
@@ -43,6 +44,34 @@ exports.naturalLanguageSearch = async (req, res, next) => {
       });
     }
     sendResponse(res, 200, results, 'Search results');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/ai/listing-assist
+ * Body: multipart with field "image" (single file)
+ * Returns: { title, description, category, condition, keywords, price: { suggested, min, max, ... } }
+ */
+exports.listingAssist = async (req, res, next) => {
+  try {
+    if (!req.file || !req.file.buffer || !req.file.buffer.length) {
+      return res.status(400).json({ status: 'fail', message: 'Image is required' });
+    }
+
+    const suggestion = await ListingAssistService.analyseImage(
+      req.file.buffer,
+      req.file.mimetype || 'image/jpeg'
+    );
+
+    const price = await ListingAssistService.suggestPrice({
+      category: suggestion.category,
+      condition: suggestion.condition,
+      title: suggestion.title,
+    });
+
+    sendResponse(res, 200, { ...suggestion, price }, 'AI listing suggestion ready');
   } catch (error) {
     next(error);
   }

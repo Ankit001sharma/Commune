@@ -2065,6 +2065,151 @@ ul, ol { list-style: none; }
 }
 
 /* ============================================================ */
+/* ================ AI LISTING ASSIST STYLES =================== */
+/* ============================================================ */
+.ai-assist-banner {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--cx-radius);
+  border: 1px solid var(--cx-border);
+  background: linear-gradient(135deg, rgba(102,102,255,0.08), rgba(139,92,246,0.06));
+  position: relative;
+  overflow: hidden;
+}
+.ai-assist-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 0%, rgba(102,102,255,0.18) 50%, transparent 100%);
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+.ai-assist-banner.ai-state-running::before {
+  animation: ai-shimmer 1.6s linear infinite;
+}
+@keyframes ai-shimmer {
+  to { transform: translateX(100%); }
+}
+.ai-assist-banner.ai-state-error {
+  background: linear-gradient(135deg, rgba(239,68,68,0.08), rgba(239,68,68,0.04));
+  border-color: rgba(239,68,68,0.4);
+}
+.ai-assist-banner.ai-state-done {
+  background: linear-gradient(135deg, rgba(16,185,129,0.08), rgba(102,102,255,0.06));
+  border-color: rgba(16,185,129,0.35);
+}
+
+.ai-assist-icon {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, #6666FF, #8B5CF6);
+  color: #fff;
+  box-shadow: 0 6px 14px -6px rgba(102,102,255,0.6);
+}
+
+.ai-assist-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ai-assist-body strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.92rem;
+  color: var(--cx-text);
+}
+.ai-assist-body span {
+  font-size: 0.8rem;
+  color: var(--cx-text-secondary);
+}
+.ai-assist-body em {
+  font-style: normal;
+  color: var(--cx-primary);
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.ai-assist-actions { display: flex; gap: 8px; }
+
+.btn-sm {
+  padding: 7px 14px !important;
+  font-size: 0.8rem !important;
+}
+
+/* ----- AI Smart Price card ----- */
+.ai-price-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--cx-radius);
+  background: var(--cx-bg);
+  border: 1px solid var(--cx-border);
+  box-shadow: var(--cx-shadow-sm);
+}
+.ai-price-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--cx-text);
+}
+.ai-price-head strong { color: var(--cx-text); font-weight: 700; }
+.ai-conf {
+  margin-left: auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.ai-conf-high   { background: rgba(16,185,129,0.14); color: #047857; }
+.ai-conf-medium { background: rgba(245,158,11,0.16); color: #b45309; }
+.ai-conf-low    { background: rgba(239,68,68,0.14); color: #b91c1c; }
+
+.ai-price-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+.ai-price-main, .ai-price-range {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ai-price-label {
+  font-size: 0.72rem;
+  color: var(--cx-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.ai-price-main strong {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--cx-primary);
+}
+.ai-price-range strong {
+  font-size: 0.95rem;
+  color: var(--cx-text);
+  font-weight: 700;
+}
+.ai-price-rationale {
+  font-size: 0.78rem;
+  color: var(--cx-text-muted);
+  margin: 0;
+  font-style: italic;
+}
+
+@media (max-width: 600px) {
+  .ai-assist-banner { grid-template-columns: 36px 1fr; }
+  .ai-assist-actions { grid-column: 1 / -1; justify-content: flex-end; }
+  .ai-price-row { grid-template-columns: 1fr; align-items: flex-start; }
+}
+
+/* ============================================================ */
 /* ============== ADMIN CONTROL CENTER STYLES ================== */
 /* ============================================================ */
 .admin-shell {
