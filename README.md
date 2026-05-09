@@ -75,6 +75,4 @@ CommuneX is a full-stack platform designed for campus communities to buy, sell, 
 - `backend/`: Express server, controllers, models, and services.
 - `frontend/`: React application, components, and pages.
 
-## License
 
-MIT
