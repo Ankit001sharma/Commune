@@ -19,6 +19,8 @@ const memoryUpload = multer({
 });
 
 router.get('/recommendations', protect, aiController.getRecommendations);
+router.get('/feed', protect, aiController.getRecommendationFeed);
+router.get('/email-campaigns', protect, aiController.getRecommendationCampaigns);
 router.get('/search', protect, aiController.naturalLanguageSearch);
 router.post('/chatbot', aiController.chatbot);
 

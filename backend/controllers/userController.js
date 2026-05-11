@@ -6,6 +6,7 @@ const Notification = require('../models/Notification');
 const AppError = require('../utils/AppError');
 const { sendResponse } = require('../utils/response');
 const { emitNotificationToUser } = require('../services/socketService');
+const ActivityTracker = require('../services/ActivityTracker');
 
 const ITEM_TYPE_TO_MODEL = {
   listing: 'Listing',
@@ -35,12 +36,16 @@ const normalizeItemType = (value) => {
 
 const getItemByType = async (itemId, itemType) => {
   if (itemType === 'listing') {
-    return Listing.findOne({ _id: itemId, ...ITEM_TYPE_TO_STATUS_FILTER.listing }).select('title tags seller');
+    return Listing.findOne({ _id: itemId, ...ITEM_TYPE_TO_STATUS_FILTER.listing }).select(
+      'title tags seller category'
+    );
   }
   if (itemType === 'service') {
-    return Service.findOne({ _id: itemId, ...ITEM_TYPE_TO_STATUS_FILTER.service }).select('title tags provider');
+    return Service.findOne({ _id: itemId, ...ITEM_TYPE_TO_STATUS_FILTER.service }).select(
+      'title tags provider category'
+    );
   }
-  return Post.findOne({ _id: itemId, ...ITEM_TYPE_TO_STATUS_FILTER.post }).select('title tags author');
+  return Post.findOne({ _id: itemId, ...ITEM_TYPE_TO_STATUS_FILTER.post }).select('title tags author type');
 };
 
 exports.saveItem = async (req, res, next) => {
@@ -110,6 +115,13 @@ exports.saveItem = async (req, res, next) => {
     await user.save({ validateBeforeSave: false });
 
     if (saved) {
+      ActivityTracker.logSave(req.user._id, {
+        itemType,
+        itemId: item._id,
+        category: item.category || item.type || null,
+        tags: item.tags || [],
+      }).catch(() => {});
+
       const ownerField = ITEM_TYPE_TO_OWNER_FIELD[itemType];
       const ownerId = item[ownerField]?.toString();
 
@@ -300,6 +312,53 @@ exports.getActivity = async (req, res, next) => {
       comments: filteredComments,
       timeline: filteredTimeline,
     }, 'Activity fetched successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getEmailPreferences = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).select('recommendationProfile.notificationPreferences');
+    const prefs = user?.recommendationProfile?.notificationPreferences;
+    sendResponse(res, 200, prefs || {}, 'Email preferences');
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.updateEmailPreferences = async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const updates = {};
+
+    const boolKeys = ['dailyDigest', 'newMatchAlerts', 'reEngagement', 'priceDropAlerts'];
+    boolKeys.forEach((key) => {
+      if (body[key] !== undefined) {
+        updates[`recommendationProfile.notificationPreferences.${key}`] = Boolean(body[key]);
+      }
+    });
+
+    if (body.weeklyCap !== undefined) {
+      const cap = Math.min(20, Math.max(0, parseInt(body.weeklyCap, 10) || 0));
+      updates['recommendationProfile.notificationPreferences.weeklyCap'] = cap;
+    }
+
+    if (body.unsubscribe === true) {
+      updates['recommendationProfile.notificationPreferences.unsubscribedAt'] = new Date();
+    }
+    if (body.resubscribe === true) {
+      updates['recommendationProfile.notificationPreferences.unsubscribedAt'] = null;
+    }
+
+    if (!Object.keys(updates).length) {
+      return next(new AppError('No valid preference fields provided.', 400));
+    }
+
+    await User.findByIdAndUpdate(req.user._id, { $set: updates }, { new: false });
+
+    const user = await User.findById(req.user._id).select('recommendationProfile.notificationPreferences');
+    sendResponse(res, 200, user.recommendationProfile.notificationPreferences, 'Preferences updated');
   } catch (error) {
     next(error);
   }

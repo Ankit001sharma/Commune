@@ -4,7 +4,8 @@ const { sendResponse, sendPaginatedResponse } = require('../utils/response');
 const QueryBuilder = require('../utils/QueryBuilder');
 const { normalizeFilePath } = require('../utils/file');
 
-const mongoose = require ("mongoose");
+const mongoose = require('mongoose');
+const { enqueueNewMatchAlert } = require('../services/queues/recommendationQueue');
 const https = require('https');
 const FREE_UPLOAD_LIMIT = 2;
 const DEBUG_LOCATION = process.env.DEBUG_LOCATION === 'true';
@@ -228,6 +229,8 @@ exports.createListing = async (req, res, next) => {
     const listing = await Listing.create(listingData);
     await listing.populate('seller', 'firstName lastName avatar rating');
 
+    enqueueNewMatchAlert(listing._id).catch(() => {});
+
     sendResponse(res, 201, listing, tokenResult.charged ? 'Listing created using 1 token' : 'Listing created using a free upload');
   } catch (error) {
     next(error);
@@ -278,21 +281,8 @@ exports.getListing = async (req, res, next) => {
     listing.views = (listing.views || 0) + 1;
     await listing.save({ validateBeforeSave: false });
 
-    // safe user check
-    if (req.user && req.user._id && listing.category) {
-      try {
-        await require("../models/User").findByIdAndUpdate(
-          req.user._id,
-          {
-            $addToSet: {
-              "recommendationProfile.viewedCategories": listing.category,
-            },
-          },
-          { new: true }
-        );
-      } catch (err) {
-        console.log("Recommendation update error:", err);
-      }
+    if (req.user && listing.category) {
+      req._loggedItem = { category: listing.category, tags: listing.tags || [] };
     }
 
     sendResponse(res, 200, listing);

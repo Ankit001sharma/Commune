@@ -43,4 +43,16 @@ module.exports = {
     model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
   },
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+
+  /* Redis + BullMQ — optional; AI email agent queues no-op when REDIS_URL unset */
+  redis: {
+    url: process.env.REDIS_URL || '',
+  },
+
+  recommendation: {
+    dailyDigestCron: process.env.REC_DAILY_CRON || '0 9 * * *',
+    reEngagementCron: process.env.REC_REENGAGEMENT_CRON || '0 10 * * 1',
+    inactiveDaysForReEngagement: parseInt(process.env.REC_INACTIVE_DAYS || '7', 10),
+    reEngagementCooldownDays: parseInt(process.env.REC_REENGAGEMENT_COOLDOWN_DAYS || '14', 10),
+  },
 };

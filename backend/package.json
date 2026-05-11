@@ -8,9 +8,11 @@
     "dev": "nodemon server.js",
     "seed": "node utils/seed.js",
     "migrate:images": "node utils/migrateLegacyImagesToCloudinary.js",
-    "send:welcome": "node scripts/sendWelcomeToOldUsers.js"
+    "send:welcome": "node scripts/sendWelcomeToOldUsers.js",
+    "rec:agent": "node scripts/runRecommendationAgent.js"
   },
   "dependencies": {
+    "bullmq": "^5.34.5",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^1.41.3",
     "cors": "^2.8.5",
@@ -18,6 +20,7 @@
     "express": "^4.21.0",
     "express-rate-limit": "^7.4.0",
     "express-validator": "^7.3.1",
+    "ioredis": "^5.4.2",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.6.0",

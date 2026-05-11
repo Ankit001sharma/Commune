@@ -37,6 +37,8 @@ import Transactions, { TransactionDetail } from './pages/transactions/Transactio
 
 // AI Search
 import AISearch from './pages/ai/AISearch';
+import RecommendationInsights from './pages/recommendations/RecommendationInsights';
+import EmailPreferences from './pages/settings/EmailPreferences';
 import Notifications from './pages/notifications/Notifications';
 import SavedItems from './pages/saved/SavedItems';
 import Activity from './pages/activity/Activity';
@@ -130,6 +132,8 @@ const App = () => {
 
           {/* AI Search & Notifications */}
           <Route path="/ai-search" element={<AISearch />} />
+          <Route path="/recommendations" element={<RecommendationInsights />} />
+          <Route path="/settings/email-preferences" element={<EmailPreferences />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/saved-items" element={<SavedItems />} />
           <Route path="/activity" element={<Activity />} />

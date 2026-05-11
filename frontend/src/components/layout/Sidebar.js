@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
   HomeIcon, ShoppingBagIcon, BriefcaseIcon, UsersIcon,
   MessageCircleIcon, CreditCardIcon, DashboardIcon,
-  LogOutIcon, ZapIcon, HeartIcon, SettingsIcon
+  LogOutIcon, ZapIcon, HeartIcon, SettingsIcon, TrendingUpIcon, BellIcon,
 } from '../Icons';
 
 const navItems = [
@@ -21,6 +21,8 @@ const navItems = [
   { to: '/admin', icon: SettingsIcon, label: 'Admin', adminOnly: true },
   { label: 'AI', type: 'section' },
   { to: '/ai-search', icon: ZapIcon, label: 'Smart Search' },
+  { to: '/recommendations', icon: TrendingUpIcon, label: 'AI picks' },
+  { to: '/settings/email-preferences', icon: BellIcon, label: 'Email alerts' },
 ];
 
 const Sidebar = ({ isOpen, collapsed, onClose }) => {

@@ -1,6 +1,8 @@
 const RecommendationEngine = require('../services/RecommendationEngine');
 const ChatbotService = require('../services/ChatbotService');
 const ListingAssistService = require('../services/ListingAssistService');
+const ActivityTracker = require('../services/ActivityTracker');
+const EmailCampaignLog = require('../models/EmailCampaignLog');
 const { sendResponse } = require('../utils/response');
 const User = require('../models/User');
 
@@ -27,23 +29,45 @@ exports.naturalLanguageSearch = async (req, res, next) => {
   try {
     const { q, type = 'all' } = req.query;
     if (!q || q.trim().length === 0) {
-      return sendResponse(res, 200, { listings: [], services: [] }, 'No query provided');
+      return sendResponse(res, 200, { listings: [], services: [], posts: [] }, 'No query provided');
     }
 
     const results = await RecommendationEngine.naturalLanguageSearch(q, type);
     if (req.user?._id) {
-      const terms = q.toLowerCase().split(/\s+/).filter((word) => word.length > 2);
-      await User.findByIdAndUpdate(req.user._id, {
-        $push: {
-          'recommendationProfile.searches': {
-            $each: terms,
-            $position: 0,
-            $slice: 30,
-          },
-        },
+      const total =
+        (results.listings?.length || 0) +
+        (results.services?.length || 0) +
+        (results.posts?.length || 0);
+      await ActivityTracker.logSearch(req.user._id, {
+        query: q,
+        results: total,
+        source: 'search',
       });
     }
     sendResponse(res, 200, results, 'Search results');
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getRecommendationFeed = async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 12;
+    const feed = await RecommendationEngine.getRecommendationFeed(req.user._id, limit);
+    sendResponse(res, 200, feed, 'Recommendation feed');
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getRecommendationCampaigns = async (req, res, next) => {
+  try {
+    const campaigns = await EmailCampaignLog.find({ user: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(25)
+      .select('campaignType subject sentAt openedAt clickedAt status items abArm')
+      .lean();
+    sendResponse(res, 200, { campaigns }, 'Email campaign history');
   } catch (error) {
     next(error);
   }

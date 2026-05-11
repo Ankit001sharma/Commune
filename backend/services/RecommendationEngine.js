@@ -7,6 +7,8 @@
 const Listing = require('../models/Listing');
 const Service = require('../models/Service');
 const Post = require('../models/Post');
+const User = require('../models/User');
+const UserActivity = require('../models/UserActivity');
 
 class RecommendationEngine {
   static buildTagFrequency(savedItems = []) {
@@ -227,6 +229,311 @@ class RecommendationEngine {
     }
 
     return results;
+  }
+
+  /* ================================================================ */
+  /*  Personalised digest — used by the AI Email Recommendation Agent  */
+  /* ================================================================ */
+
+  /**
+   * buildUserProfile
+   * ----------------
+   * Aggregates everything we know about a user into a single object the
+   * digest pipeline can ingest:
+   *   {
+   *     userId,
+   *     topCategory,
+   *     topKeywords:        [{ keyword, weight }, ...],
+   *     viewedCategories:   [...],
+   *     savedTags:          [...],
+   *     mostSearchedQuery:  string,
+   *     unmetSearches:      [...] // queries that returned 0 results recently
+   *   }
+   */
+  static async buildUserProfile(userId) {
+    const user = await User.findById(userId)
+      .select('favorites savedItems recommendationProfile firstName email')
+      .lean();
+    if (!user) return null;
+
+    const profile = user.recommendationProfile || {};
+    const searches = profile.searches || [];
+    const viewedCategories = profile.viewedCategories || [];
+    const savedTags = (user.savedItems || []).flatMap((s) => s.tags || []);
+
+    /* Frequency-rank search keywords. */
+    const searchFreq = searches.reduce((acc, kw) => {
+      acc[kw] = (acc[kw] || 0) + 1;
+      return acc;
+    }, {});
+    const topKeywords = Object.entries(searchFreq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([keyword, weight]) => ({ keyword, weight }));
+
+    /* Frequency-rank viewed categories. */
+    const catFreq = viewedCategories.reduce((acc, c) => {
+      acc[c] = (acc[c] || 0) + 1;
+      return acc;
+    }, {});
+    const topCategory = Object.entries(catFreq).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+    /* Find search queries that returned no results in the last 30 days. */
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const unmet = await UserActivity.find({
+      user: userId,
+      eventType: 'search_no_result',
+      createdAt: { $gte: since },
+    })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('query')
+      .lean();
+
+    /* Tag affinity Map → plain object. */
+    const tagAffinity = profile.tagAffinity instanceof Map
+      ? Object.fromEntries(profile.tagAffinity)
+      : (profile.tagAffinity || {});
+
+    return {
+      userId: String(user._id),
+      firstName: user.firstName,
+      email: user.email,
+      topCategory,
+      topKeywords,
+      viewedCategories: Object.keys(catFreq),
+      savedTags: [...new Set(savedTags)],
+      tagAffinity,
+      mostSearchedQuery: searches[0] || null,
+      unmetSearches: unmet.map((u) => u.query).filter(Boolean),
+      preferences: profile.notificationPreferences || {},
+      lastDigestAt: profile.lastRecommendationEmailAt || null,
+    };
+  }
+
+  /**
+   * scoreItem
+   * ---------
+   * Hybrid score combining:
+   *   - category match (heavy)
+   *   - tag overlap weighted by tagAffinity
+   *   - keyword match in title
+   *   - freshness bonus
+   *   - popularity bonus (views)
+   */
+  static scoreItem(item, profile) {
+    let score = 0;
+    const cat = (item.category || '').toLowerCase();
+    if (cat && profile.viewedCategories.includes(cat)) score += 5;
+    if (cat && cat === profile.topCategory) score += 3;
+
+    const itemTags = (item.tags || []).map((t) => `${t}`.toLowerCase());
+    itemTags.forEach((tag) => {
+      score += (profile.tagAffinity?.[tag] || 0);
+      if (profile.savedTags.includes(tag)) score += 2;
+    });
+
+    const title = (item.title || '').toLowerCase();
+    profile.topKeywords.forEach(({ keyword, weight }) => {
+      if (title.includes(keyword)) score += weight * 1.5;
+    });
+
+    const ageDays = (Date.now() - new Date(item.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+    score += Math.max(0, 7 - ageDays) * 0.5;          // freshness
+    score += Math.log1p(item.views || 0) * 0.3;       // popularity
+
+    return score;
+  }
+
+  /**
+   * getPersonalizedDigest
+   * ---------------------
+   * Returns up to `limit` listings ranked for this user, plus the profile
+   * we used (so the AI composer can write reasons that reference the actual
+   * signals we acted on).
+   */
+  static async getPersonalizedDigest(userId, limit = 5) {
+    const profile = await this.buildUserProfile(userId);
+    if (!profile) return { profile: null, items: [] };
+
+    /* Build a query that pulls a generous candidate set, then re-rank locally.
+       We exclude the user's own listings and anything they already saved/favorited. */
+    const orClauses = [];
+    if (profile.viewedCategories.length) {
+      orClauses.push({ category: { $in: profile.viewedCategories } });
+    }
+    if (profile.savedTags.length) {
+      orClauses.push({ tags: { $in: profile.savedTags } });
+    }
+    if (profile.topKeywords.length) {
+      const keywordRegex = profile.topKeywords.map(({ keyword }) => new RegExp(keyword, 'i'));
+      orClauses.push({ title: { $in: keywordRegex } });
+    }
+
+    const query = {
+      status: 'active',
+      seller: { $ne: userId },
+    };
+    if (orClauses.length) query.$or = orClauses;
+
+    const candidates = await Listing.find(query)
+      .sort({ createdAt: -1, views: -1 })
+      .limit(limit * 6)
+      .populate('seller', 'firstName lastName avatar')
+      .lean();
+
+    /* Dedup against existing favorites/saved. */
+    const user = await User.findById(userId).select('favorites savedItems').lean();
+    const blocked = new Set([
+      ...(user?.favorites || []).map(String),
+      ...((user?.savedItems || []).filter((s) => s.itemType === 'listing').map((s) => String(s.item))),
+    ]);
+
+    const ranked = candidates
+      .filter((c) => !blocked.has(String(c._id)))
+      .map((c) => ({ item: c, score: this.scoreItem(c, profile) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(({ item, score }) => ({ ...item, _recScore: Math.round(score * 100) / 100 }));
+
+    return { profile, items: ranked };
+  }
+
+  /**
+   * findUsersForListing
+   * -------------------
+   * The inverse query — given a brand new listing, find the users whose
+   * profile matches it well enough to warrant a "new match" email.
+   * Used by the new-match-alert worker.
+   */
+  static async findUsersForListing(listing, { minScore = 6, maxUsers = 50 } = {}) {
+    if (!listing || !listing.category) return [];
+    const cat = listing.category.toLowerCase();
+    const tags = (listing.tags || []).map((t) => `${t}`.toLowerCase());
+    const titleTokens = (listing.title || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 2);
+
+    /* Pull candidates whose profile mentions the category, a matching tag,
+       or a search keyword that overlaps the title. */
+    const candidates = await User.find({
+      _id: { $ne: listing.seller },
+      'recommendationProfile.notificationPreferences.newMatchAlerts': { $ne: false },
+      'recommendationProfile.notificationPreferences.unsubscribedAt': null,
+      $or: [
+        { 'recommendationProfile.viewedCategories': cat },
+        { 'recommendationProfile.searches': { $in: titleTokens.length ? titleTokens : [''] } },
+        ...(tags.length ? [{ 'savedItems.tags': { $in: tags } }] : []),
+      ],
+    })
+      .select('firstName email recommendationProfile savedItems')
+      .limit(200)
+      .lean();
+
+    const matches = [];
+    for (const user of candidates) {
+      const profile = await this.buildUserProfile(user._id);
+      if (!profile) continue;
+      const score = this.scoreItem(listing, profile);
+      if (score >= minScore) {
+        matches.push({ user, score });
+      }
+    }
+
+    return matches
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxUsers);
+  }
+
+  /**
+   * Collaborative-lite: listings that share tags with the user's saved items,
+   * excluding their own inventory and already-saved rows (approximates
+   * "people with similar tastes also viewed").
+   */
+  static async getSimilarInterestListings(userId, userSavedItems = [], limit = 6) {
+    const savedListingIds = userSavedItems
+      .filter((s) => s.itemType === 'listing')
+      .map((s) => String(s.item));
+    const tags = [...new Set(userSavedItems.flatMap((s) => s.tags || []).map((t) => `${t}`.toLowerCase()))];
+    if (!tags.length) return [];
+
+    const rows = await Listing.find({
+      status: 'active',
+      seller: { $ne: userId },
+      _id: { $nin: savedListingIds },
+      tags: { $in: tags },
+    })
+      .sort({ views: -1, createdAt: -1 })
+      .limit(limit * 2)
+      .populate('seller', 'firstName lastName avatar rating')
+      .lean();
+
+    return rows.slice(0, limit);
+  }
+
+  /**
+   * Aggregated in-app feed for Home + recommendation dashboard.
+   */
+  static async getRecommendationFeed(userId, limit = 12) {
+    const profile = await this.buildUserProfile(userId);
+    const userDoc = await User.findById(userId).select('favorites savedItems').lean();
+    const userFavorites = userDoc?.favorites || [];
+    const userSavedItems = userDoc?.savedItems || [];
+
+    const digestLimit = Math.min(Math.max(4, Math.floor(limit / 2)), 8);
+    const [digestResult, listingsRec, servicesRec, similarPool] = await Promise.all([
+      this.getPersonalizedDigest(userId, digestLimit),
+      this.getListingRecommendations(userId, userFavorites, userSavedItems, limit),
+      this.getServiceRecommendations(userId, userSavedItems, Math.min(8, limit)),
+      this.getSimilarInterestListings(userId, userSavedItems, 6),
+    ]);
+
+    const topKw = profile?.topKeywords?.[0]?.keyword;
+    let becauseYouSearched = null;
+    if (topKw) {
+      const esc = topKw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const rx = new RegExp(esc, 'i');
+      const matched = listingsRec.filter(
+        (l) =>
+          rx.test(l.title || '') ||
+          (l.tags || []).some((t) => rx.test(`${t}`))
+      );
+      becauseYouSearched = {
+        keyword: topKw,
+        subtitle: `Because you searched for "${topKw}"`,
+        listings: matched.slice(0, 4),
+      };
+    }
+
+    let trendingInCategory = [];
+    if (profile?.topCategory) {
+      trendingInCategory = await Listing.find({
+        status: 'active',
+        category: profile.topCategory,
+        seller: { $ne: userId },
+      })
+        .sort({ views: -1, createdAt: -1 })
+        .limit(4)
+        .populate('seller', 'firstName lastName avatar rating')
+        .lean();
+    }
+
+    return {
+      profileSummary: profile && {
+        topCategory: profile.topCategory,
+        topKeywords: profile.topKeywords,
+        viewedCategories: profile.viewedCategories,
+        unmetSearches: profile.unmetSearches,
+      },
+      personalizedListings: digestResult.items || [],
+      recommendedListings: listingsRec,
+      recommendedServices: servicesRec,
+      becauseYouSearched,
+      trendingInCategory,
+      similarUsersAlsoViewed: similarPool,
+    };
   }
 }
 

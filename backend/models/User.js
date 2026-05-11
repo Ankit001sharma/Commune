@@ -137,9 +137,30 @@ const userSchema = new mongoose.Schema(
       totalPurchased: { type: Number, default: 0, min: 0 },
     },
     recommendationProfile: {
+      /* Up to 30 most recent search keywords (newest first). */
       searches: [{ type: String, lowercase: true, trim: true }],
+      /* Categories of listings/services the user has opened. */
       viewedCategories: [{ type: String, lowercase: true, trim: true }],
+      /* Tag-frequency map — denormalised for fast ranking. */
+      tagAffinity: {
+        type: Map,
+        of: Number,
+        default: {},
+      },
+      /* Suppress next email if a digest was just sent. */
       lastRecommendationEmailAt: { type: Date, default: null },
+      lastNewMatchEmailAt: { type: Date, default: null },
+
+      /* User-controlled notification preferences. */
+      notificationPreferences: {
+        dailyDigest: { type: Boolean, default: true },
+        newMatchAlerts: { type: Boolean, default: true },
+        reEngagement: { type: Boolean, default: true },
+        priceDropAlerts: { type: Boolean, default: true },
+        /* Frequency cap (max emails per week across all campaigns). */
+        weeklyCap: { type: Number, default: 4, min: 0, max: 20 },
+        unsubscribedAt: { type: Date, default: null },
+      },
     },
     lastActive: {
       type: Date,

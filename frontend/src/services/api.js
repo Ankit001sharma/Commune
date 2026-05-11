@@ -53,6 +53,8 @@ export const userAPI = {
   saveItem: (payload) => api.post('/users/save-item', payload),
   getSavedItems: () => api.get('/users/saved-items'),
   getActivity: (params) => api.get('/users/activity', { params }),
+  getEmailPreferences: () => api.get('/users/email-preferences'),
+  updateEmailPreferences: (data) => api.patch('/users/email-preferences', data),
 };
 
 // ===== Listings =====
@@ -124,6 +126,8 @@ export const paymentAPI = {
 export const aiAPI = {
   getRecommendations: (params) => api.get('/ai/recommendations', { params }),
   getRecommendationsV2: (params) => api.get('/recommendations', { params }),
+  getRecommendationFeed: (params) => api.get('/ai/feed', { params }),
+  getEmailCampaigns: () => api.get('/ai/email-campaigns'),
   search: (q, type) => api.get('/ai/search', { params: { q, type } }),
   chatbot: (message) => api.post('/ai/chatbot', { message }),
   listingAssist: (file) => {

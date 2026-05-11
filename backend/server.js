@@ -9,6 +9,7 @@ const { Server } = require('socket.io');
 
 const config = require('./config');
 const connectDB = require('./config/database');
+const recommendationQueue = require('./services/queues/recommendationQueue');
 const errorHandler = require('./middleware/errorHandler');
 const { initializeSocket } = require('./services/socketService');
 
@@ -111,6 +112,9 @@ app.use(errorHandler);
 // Start server
 const startServer = async () => {
   await connectDB();
+
+  await recommendationQueue.startWorkers();
+  await recommendationQueue.scheduleRepeatableJobs();
 
   server.listen(config.port, () => {
     console.log(`\n====================================`);
